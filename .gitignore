@@ -1,0 +1,7 @@
+# Filetypes that git should not keep track of
+# These are assembled files that one should assemble from the source code themselves.
+# This also includes non-source code files such as IDE project configuration files.
+
+*.bat
+*.hex
+*.bin
