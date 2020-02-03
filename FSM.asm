@@ -1,8 +1,8 @@
 $NOLIST
-$MODDE1SOC
+$MOD9351
 $LIST
 
-CLK           EQU 33333333 ; Microcontroller system crystal frequency in Hz
+CLK           EQU 7373000  ; Microcontroller system crystal frequency in Hz
 TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
 TIMER2_RELOAD EQU ((65536-(CLK/(12*TIMER2_RATE))))
 
@@ -66,10 +66,10 @@ Timer2_Init:
 Timer2_ISR:
 	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
 	; Increment the timers for each FSM. That is all we do here!
-	inc FSM1_timer 
-	inc FSM2_timer 
-	inc FSM3_timer 
-	inc FSM4_timer 
+	inc FSM1_timer
+	inc FSM2_timer
+	inc FSM3_timer
+	inc FSM4_timer
 	reti
 
 ; The 8-bit hex number passed in the accumulator is converted to
@@ -80,7 +80,7 @@ Hex_to_bcd_8bit:
 	mov R1, a   ; After dividing, a has the 100s
 	mov a, b    ; Remainder is in register b
 	mov b, #10
-	div ab ; The tens are stored in a, the units are stored in b 
+	div ab ; The tens are stored in a, the units are stored in b
 	swap a
 	anl a, #0xf0
 	orl a, b
@@ -100,30 +100,30 @@ main:
     mov LEDRA, #0 ; LEDRA is bit addressable
     mov LEDRB, #0 ; LEDRB is NOT bit addresable
     setb EA   ; Enable Global interrupts
-    
+
     ; Initialize variables
     mov FSM1_state, #0
     mov Count1, #0
     mov Count2, #0
     mov Count3, #0
-    
+
     ; PUT ALL INITIALISATIONS HERE ;
     ;------------------------------;
-	
+
 	; After initialization the program stays in this 'forever' loop
 loop:
 	mov a, FSM_state_decider
 FSM_RESET:
 	; SET TIMER TO 0 ;
 	; SET TEMP TO ROOM TEMP ;
-	; CLEAR THE DISPLAY FOR WHAT STATE WE'RE IN ; 
+	; CLEAR THE DISPLAY FOR WHAT STATE WE'RE IN ;
 	cjne a, #0, FSM_INITIALISE
 	;jb KEY.1, FSM_done
 	mov FSM1_timer, #0
 	inc FSM_state_decider
 	sjmp FSM_done
 FSM_INITIALISE:
-	; WE CAN USE THIS STATE AS A DEBOUNCE STATE FOR THE BUTTON WE PRESS TO START THE PROGRAM ; 
+	; WE CAN USE THIS STATE AS A DEBOUNCE STATE FOR THE BUTTON WE PRESS TO START THE PROGRAM ;
 	cjne a, #1, FSM_RAMP_TO_SOAK
 	; this is the debounce state
 	mov a, FSM1_timer
@@ -157,8 +157,8 @@ FSM_COOLDOWN:
 	; SHUT EVERYTHING DOWN ;
 FSM_done:
 	mov FSM_state_decider, #0
-	
-	
+
+
 ;---------------------------------------;
 ; TEMPLATE CODE BELOW, LEAVE IT FOR NOW ;
 
@@ -172,7 +172,7 @@ Increment_Count1:
 	sjmp Display_Count1
 Decrement_Count1:
 	dec Count1
-Display_Count1:	
+Display_Count1:
     mov a, Count1
     lcall Hex_to_bcd_8bit
 	lcall Display_BCD_7_Seg_HEX10
@@ -188,7 +188,7 @@ Increment_Count2:
 	sjmp Display_Count2
 Decrement_Count2:
 	dec Count2
-Display_Count2:	
+Display_Count2:
     mov a, Count2
     lcall Hex_to_bcd_8bit
 	lcall Display_BCD_7_Seg_HEX32
