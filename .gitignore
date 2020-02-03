@@ -3,5 +3,6 @@
 # This also includes non-source code files such as IDE project configuration files.
 
 *.bat
+*.lst
 *.hex
 *.bin
