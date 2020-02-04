@@ -12,10 +12,11 @@
 ; To set the duty cycle of the PWM, change the value of PWM_Duty_Cycle255
 ; 0 is 0% (always off), 127 is 50%, 255 is 100% (full beans)
 
-CLK           EQU 7373000  ; Microcontroller system crystal frequency in Hz
-TIMER0_RATE   EQU 5120     ; 20 Hz PWM, 256 point resolution (20 * 256 = 5120)
+CLK           EQU 7373000 ; Microcontroller system clock frequency in Hz
+PWM_BASE_FREQ EQU 20 ; Hz frequency of PWM waveform
+TIMER0_RATE   EQU (PWM_BASE_FREQ*256) ; 256 point time resolution
 TIMER0_RELOAD EQU ((65536-(CLK/(2*TIMER0_RATE))))
-TIMER1_RATE   EQU 100     ; 100Hz, for a timer tick of 10ms
+TIMER1_RATE   EQU 100 ; 100Hz, for a timer tick of 10ms
 TIMER1_RELOAD EQU ((65536-(CLK/(2*TIMER1_RATE))))
 
 PWM_OUTPUT equ P1.7
@@ -37,7 +38,7 @@ Timer0_Init:
 Timer0_ISR:
 	mov TH0, #high(TIMER0_RELOAD)
 	mov TL0, #low(TIMER0_RELOAD)
-    cpl P1.4 ; for debugging
+    ; cpl P1.4 ; for debugging
     mov a, PWM_Duty_Cycle255
     jnz TTCheck_Full_Cycle
     clr PWM_OUTPUT
@@ -81,7 +82,7 @@ Timer1_Init:
 Timer1_ISR:
 	mov TH1, #high(TIMER1_RELOAD)
 	mov TL1, #low(TIMER1_RELOAD)
-	cpl P1.6 ; To check the interrupt rate with oscilloscope. It must be precisely a 10 ms pulse.
+	; cpl P1.6 ; To check the interrupt rate with oscilloscope. It must be precisely a 10 ms pulse.
 
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -97,7 +98,7 @@ Inc_Done:
 
 	; 500 milliseconds have passed.  Set a flag so the main program knows
 	setb half_seconds_flag ; Let the main program know half second had passed
-	cpl P1.5
+	; cpl P1.5 ; For debugging
 	; Reset to zero the 10-milli-seconds counter, it is a 8-bit variable
 	mov Count10ms, #0
 
