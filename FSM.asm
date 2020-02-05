@@ -2,11 +2,22 @@ $NOLIST
 $MOD9351
 $LIST
 
-CLK           EQU 7373000  ; Microcontroller system crystal frequency in Hz
-TIMER2_RATE   EQU 1000     ; 1000Hz, for a timer tick of 1ms
-TIMER2_RELOAD EQU ((65536-(CLK/(12*TIMER2_RATE))))
+; Serial
 BAUD equ 115200
 BRG_VAL equ (0x100-(CLK/(16*BAUD)))
+; SPI
+CE_ADC    EQU  P2.7
+MY_MOSI   EQU  P2.6
+MY_MISO   EQU  P2.5
+MY_SCLK   EQU  P2.4
+; Pin Assignments
+LCD_RS equ P0.7
+LCD_RW equ P3.0
+LCD_E  equ P3.1
+LCD_D4 equ P2.0
+LCD_D5 equ P2.1
+LCD_D6 equ P2.2
+LCD_D7 equ P2.3
 
 ; BUTTONS EQU PX.X GO HERE ;
 ;-------------------------;
@@ -15,13 +26,34 @@ BRG_VAL equ (0x100-(CLK/(16*BAUD)))
 org 0x0000
     ljmp main
 
-; Timer/Counter 2 overflow interrupt vector
-org 0x002B
-	ljmp Timer2_ISR
+; External interrupt 0 vector (not used in this code)
+org 0x0003
+	reti
+
+; Timer/Counter 0 overflow interrupt vector
+org 0x000B
+	ljmp Timer0_ISR
+
+; External interrupt 1 vector (not used in this code)
+org 0x0013
+	reti
+
+; Timer/Counter 1 overflow interrupt vector
+org 0x001B
+	ljmp Timer1_ISR
+
+; Serial port receive/transmit interrupt vector (not used in this code)
+org 0x0023
+	reti
 
 dseg at 0x30
+; PWM output (to oven) variables
+PWM_Duty_Cycle255: ds 1
+PWM_Cycle_Count: ds 1
+; Timing Variable
+Count10ms: ds 1
+
 ; Each FSM has its own timer
-FSM1_timer: ds 1
 ; Each FSM has its own state counter
 FSM_state_decider: ds 1 ; HELPS US SEE WHICH STATE WE ARE IN
 ; THE STATES ARE ;
@@ -38,6 +70,8 @@ bcd:ds 5
 Result: ds 4
 
 bseg
+; Flag set by timer 1 every half second (can be changed if needed)
+half_seconds_flag: dbit 1
 ; For each pushbutton we have a flag.  The corresponding FSM will set this
 ; flags to one when a valid press of the pushbutton is detected.
 ; THIS WILL BE CHANGED ACCORDING TO OUR OWN KEYS ;
@@ -48,40 +82,16 @@ mf:	dbit 1
 
 cseg
 $NOLIST
-$include(LCD_4bit.inc) ; A library of LCD related functions and utility macros
+$include(LCD_4bit_LPC9351.inc) ; A library of LCD related functions and utility macros
 $include(math32.inc)
+$include(timers.inc)
 $LIST
-CE_ADC    EQU  P2.7
-MY_MOSI   EQU  P2.6 
-MY_MISO   EQU  P2.5
-MY_SCLK   EQU  P2.4
+
 ;---------------------------------;
 ; Routine to initialize the ISR   ;
 ; for timer 2                     ;
 ;---------------------------------;
-Timer2_Init:
-	mov T2CON, #0 ; Stop timer/counter.  Autoreload mode.
-	mov TH2, #high(TIMER2_RELOAD)
-	mov TL2, #low(TIMER2_RELOAD)
-	; Set the reload value
-	mov RCAP2H, #high(TIMER2_RELOAD)
-	mov RCAP2L, #low(TIMER2_RELOAD)
-	; Enable the timer and interrupts
-    setb ET2  ; Enable timer 2 interrupt
-    setb TR2  ; Enable timer 2
-	ret
 
-;---------------------------------;
-; ISR for timer 2.  Runs evere ms ;
-;---------------------------------;
-Timer2_ISR:
-	clr TF2  ; Timer 2 doesn't clear TF2 automatically. Do it in ISR
-	; Increment the timers for each FSM. That is all we do here!
-	inc FSM1_timer
-	inc FSM2_timer
-	inc FSM3_timer
-	inc FSM4_timer
-	reti
 
 ; The 8-bit hex number passed in the accumulator is converted to
 ; BCD and stored in [R1, R0]
@@ -148,7 +158,7 @@ putchar:
 
 getchar:
 	jnb RI, getchar
-	clr RI 
+	clr RI
 	mov a, SBUF
 	ret
 
@@ -159,7 +169,7 @@ SendString:
     lcall putchar
     inc DPTR
     sjmp SendString
-    
+
 SendStringDone:
     ret
 ;---------------------------------;
@@ -171,7 +181,7 @@ main:
 	; Initialization of hardware
     mov SP, #0x7F
     lcall Timer2_Init
-	lcall LCD_4BIT   
+	lcall LCD_4BIT
     lcall InitSerialPort
     lcall SendString
     lcall INI_SPI
@@ -181,7 +191,6 @@ main:
     setb EA   ; Enable Global interrupts
 
     ; Initialize variables
-<<<<<<< HEAD
     mov FSM1_state, #0
     mov Count1, #0
     mov Count2, #0
@@ -192,13 +201,10 @@ main:
 
 	; After initialization the program stays in this 'forever' loop
 loop:
-=======
     mov FSM_state_decider, #0
-    
+
     ; PUT ALL INITIALISATIONS HERE ;
     ;------------------------------;
-
->>>>>>> b736d6906677c7de2919d3f39a150cfad0c2d802
 	mov a, FSM_state_decider
 FSM_RESET:
 	; SET TIMER TO 0 ;
@@ -208,19 +214,16 @@ FSM_RESET:
 loop0:
 	lcall Measure_temp
 	jb KEY.1, loop0
-	WaitMilliSeconds(#50)
+	Wait_Milli_Seconds(#50)
 	jb KEY.1, loop0
 	jnb KEY.1, $
 	inc FSM_state_decider
 FSM_INITIALISE:
-<<<<<<< HEAD
 	; WE CAN USE THIS STATE AS A DEBOUNCE STATE FOR THE BUTTON WE PRESS TO START THE PROGRAM ;
-=======
->>>>>>> b736d6906677c7de2919d3f39a150cfad0c2d802
 	cjne a, #1, FSM_RAMP_TO_SOAK
 
 
-		; Turn on the oven ; 
+		; Turn on the oven ;
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
 	cjne a, #2, FSM_HOLD_TEMP_AT_SOAK
 		; HEAT THE OVEN ;
@@ -242,7 +245,6 @@ FSM_HOLD_TEMP_AT_REFLOW:
 	inc FSM_state_decider
 FSM_COOLDOWN:
 	; SHUT EVERYTHING DOWN ;
-<<<<<<< HEAD
 FSM_done:
 	mov FSM_state_decider, #0
 
@@ -296,21 +298,20 @@ Clear_Count3:
 	lcall Display_BCD_7_Seg_HEX54
 Skip_Count3:
     ljmp loop
-=======
 	sjmp FSM_RESET
 
 Measure_temp:
-	clr CE_ADC 	
+	clr CE_ADC
 	mov R0, #00000001B; Start bit:1
-	lcall DO_SPI_G	
+	lcall DO_SPI_G
 	mov R0, #10000000B; Single ended, read channel 0
-	lcall DO_SPI_G	
+	lcall DO_SPI_G
 	mov a, R1          ; R1 contains bits 8 and 9
 	anl a, #00000011B  ; We need only the two least significant bits
-	mov Result+1, a    ; Save result high.	
+	mov Result+1, a    ; Save result high.
 	mov R0, #55H		; It doesn't matter what we transmit...
 	lcall DO_SPI_G
-	mov Result, R1     ; R1 contains bits 0 to 7.  Save result low.	
+	mov Result, R1     ; R1 contains bits 0 to 7.  Save result low.
 	setb CE_ADC
 	lcall Delay
 	lcall Calculate
@@ -325,7 +326,7 @@ Le1:djnz R0, Le1 ; 3 cycles->3*45.21123ns*166=22.51519us
     djnz R1, Le2 ; 22.51519us*250=5.629ms
     djnz R2, Le3 ; 5.629ms*178=1s (approximately)
     ret
-    
+
 Calculate:
 	mov x, Result
 	mov x+1, Result+1
@@ -338,12 +339,11 @@ Calculate:
 	load_y(273)
 	lcall sub32
 	lcall hex2bcd
-	Send_BCD(bcd)
+	; Send_BCD(bcd)
 	mov a, #'\r'
 	lcall putchar
 	mov a, #'\n'
 	lcall putchar
 	ret
-	
->>>>>>> b736d6906677c7de2919d3f39a150cfad0c2d802
+
 END
