@@ -3,7 +3,7 @@ $MOD9351
 $LIST
 
 CLK             EQU 7373000  ; Microcontroller system crystal frequency in Hz
-TIMER0_RATE     EQU 4096     ; 2048Hz squarewave (peak amplitude of CEM-1203 speaker)
+TIMER0_RATE     EQU 4096     ; 2048Hz squ	arewave (peak amplitude of CEM-1203 speaker)
 TIMER0_RELOAD   EQU ((65536-(CLK/(2*TIMER0_RATE))))
 TIMER1_RATE     EQU 100     ; 100Hz, for a timer tick of 10ms
 

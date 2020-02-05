@@ -4,7 +4,7 @@ $LIST
 
 ; Serial
 BAUD equ 115200
-BRG_VAL equ (0x100-(CLK/(16*BAUD)))
+BRVAL EQU ((CLK/BAUD)-16)
 ; SPI
 CE_ADC    EQU  P2.7
 MY_MOSI   EQU  P2.6
@@ -135,19 +135,14 @@ DO_SPI_G_LOOP:
 
 	; Configure the serial port and baud rate
 InitSerialPort:
-    ; Since the reset button bounces, we need to wait a bit before
-    ; sending messages, otherwise we risk displaying gibberish!
-    mov R1, #222
-    mov R0, #166
-    djnz R0, $   ; 3 cycles->3*45.21123ns*166=22.51519us
-    djnz R1, $-4 ; 22.51519us*222=4.998ms
-    ; Now we can proceed with the configuration
-	orl	PCON,#0x80
-	mov	SCON,#0x52
-	mov	BDRCON,#0x00
-	mov	BRL,#BRG_VAL
-	mov	BDRCON,#0x1E ; BDRCON=BRR|TBCK|RBCK|SPD;
-    ret
+	mov	BRGCON,#0x00
+	mov	BRGR1,#high(BRVAL)
+	mov	BRGR0,#low(BRVAL)
+	mov	BRGCON,#0x03 ; Turn-on the baud rate generator
+	mov	SCON,#0x52 ; Serial port in mode 1, ren, txrdy, rxempty
+	mov	P1M1,#0x00 ; Enable pins RxD and TXD
+	mov	P1M2,#0x00 ; Enable pins RxD and TXD
+	ret
 
 	; Send a character using the serial port
 putchar:
@@ -180,18 +175,18 @@ SendStringDone:
 main:
 	; Initialization of hardware
     mov SP, #0x7F
-    lcall Timer2_Init
+    lcall Timer0_Init
 	lcall LCD_4BIT
     lcall InitSerialPort
     lcall SendString
     lcall INI_SPI
     ; Turn off all the LEDs
-    mov LEDRA, #0 ; LEDRA is bit addressable
-    mov LEDRB, #0 ; LEDRB is NOT bit addresable
+    ;mov LEDRA, #0 ; LEDRA is bit addressable
+    ;mov LEDRB, #0 ; LEDRB is NOT bit addresable
     setb EA   ; Enable Global interrupts
 
     ; Initialize variables
-    mov FSM1_state, #0
+    mov FSM_state_decider, #0
     mov Count1, #0
     mov Count2, #0
     mov Count3, #0
@@ -213,15 +208,14 @@ FSM_RESET:
 	cjne a, #0, FSM_INITIALISE
 loop0:
 	lcall Measure_temp
-	jb KEY.1, loop0
-	Wait_Milli_Seconds(#50)
-	jb KEY.1, loop0
-	jnb KEY.1, $
+	;jb SELECT_BUTTON, loop0
+	;Wait_Milli_Seconds(#50)
+	;jb SELECT_BUTTON, loop0
+	;jnb SELECT_BUTTON, $
 	inc FSM_state_decider
 FSM_INITIALISE:
 	; WE CAN USE THIS STATE AS A DEBOUNCE STATE FOR THE BUTTON WE PRESS TO START THE PROGRAM ;
 	cjne a, #1, FSM_RAMP_TO_SOAK
-
 
 		; Turn on the oven ;
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
@@ -247,58 +241,7 @@ FSM_COOLDOWN:
 	; SHUT EVERYTHING DOWN ;
 FSM_done:
 	mov FSM_state_decider, #0
-
-
-;---------------------------------------;
-; TEMPLATE CODE BELOW, LEAVE IT FOR NOW ;
-
-; If KEY1 was detected, increment or decrement Count1.  Notice that we are displying only
-; the least two signicant digits of a counter that can have values from 0 to 255.
-	jbc Key1_flag, Increment_Count1
-	sjmp Skip_Count1
-Increment_Count1:
-	jb SWA.0, Decrement_Count1
-	inc Count1
-	sjmp Display_Count1
-Decrement_Count1:
-	dec Count1
-Display_Count1:
-    mov a, Count1
-    lcall Hex_to_bcd_8bit
-	lcall Display_BCD_7_Seg_HEX10
-Skip_Count1:
-
-; If KEY2 was detected, increment or decrement Count2.  Notice that we are displying only
-; the least two signicant digits of a counter that can have values from 0 to 255.
-	jbc Key2_flag, Increment_Count2
-	sjmp Skip_Count2
-Increment_Count2:
-	jb SWA.0, Decrement_Count2
-	inc Count2
-	sjmp Display_Count2
-Decrement_Count2:
-	dec Count2
-Display_Count2:
-    mov a, Count2
-    lcall Hex_to_bcd_8bit
-	lcall Display_BCD_7_Seg_HEX32
-Skip_Count2:
-
-; When KEY3 is pressed/released it resets the one second counter (Count3)
-	jbc Key3_flag, Clear_Count3
-	sjmp Skip_Count3
-Clear_Count3:
-    mov Count3, #0
-    ; Reset also the state machine for the one second counter and its timer
-    mov FSM4_state, #0
-	mov FSM4_timer, #0
-	; Display the new count
-    mov a, Count3
-    lcall Hex_to_bcd_8bit
-	lcall Display_BCD_7_Seg_HEX54
-Skip_Count3:
-    ljmp loop
-	sjmp FSM_RESET
+	ljmp loop
 
 Measure_temp:
 	clr CE_ADC
