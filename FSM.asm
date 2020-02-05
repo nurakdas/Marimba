@@ -2,6 +2,8 @@ $NOLIST
 $MOD9351
 $LIST
 
+;TIMER 0 AND 1 INCLUDED IN timers.inc ;
+
 ; Serial
 BAUD equ 115200
 BRVAL EQU ((CLK/BAUD)-16)
@@ -18,9 +20,14 @@ LCD_D4 equ P2.0
 LCD_D5 equ P2.1
 LCD_D6 equ P2.2
 LCD_D7 equ P2.3
+; BUTTONS
+SELECT_BUTTON   EQU P1.7
+HUNDREDS_BUTTON EQU P1.6
+TENS_BUTTON     EQU P1.4
+ONES_BUTTON     EQU P1.3
 
-; BUTTONS EQU PX.X GO HERE ;
-;-------------------------;
+;START_BUTTON    EQU P?.?
+;KILL_SWITCH:    EQU P?.?
 
 ; Reset vector
 org 0x0000
@@ -52,12 +59,25 @@ PWM_Duty_Cycle255: ds 1
 PWM_Cycle_Count: ds 1
 ; Timing Variable
 Count10ms: ds 1
+set_ones:  ds 1 ; The BCD counter incrememted in the ISR and displayed in the main loop
+set_tens: ds 1
+set_hundreds: ds 1
+
+soak_temp_total: ds 1
+soak_time_total: ds 1
+reflow_temp_total: ds 1
+reflow_time_total: ds 1
+
+soak_temp: ds 1
+soak_time: ds 1
+reflow_temp: ds 1
+reflow_time: ds 1
+
+current_parameter: ds 1
 
 ; Each FSM has its own timer
 ; Each FSM has its own state counter
 FSM_state_decider: ds 1 ; HELPS US SEE WHICH STATE WE ARE IN
-; THE STATES ARE ;
-;----------------;
 
 ; Three counters to display.
 ; THIS WILL BE CHANGED ACCORDING TO OUR OWN KEYS ;
@@ -86,12 +106,6 @@ $include(LCD_4bit_LPC9351.inc) ; A library of LCD related functions and utility 
 $include(math32.inc)
 $include(timers.inc)
 $LIST
-
-;---------------------------------;
-; Routine to initialize the ISR   ;
-; for timer 2                     ;
-;---------------------------------;
-
 
 ; The 8-bit hex number passed in the accumulator is converted to
 ; BCD and stored in [R1, R0]
@@ -191,8 +205,18 @@ main:
     mov Count2, #0
     mov Count3, #0
 
-    ; PUT ALL INITIALISATIONS HERE ;
-    ;------------------------------;
+    ; DISPLAY INITIALISATION ;
+soak_time_display:    db 'Soak Time: xxx s', 0
+soak_time_num:        db '      xxx  s    ', 0
+
+soak_temp_display:    db 'Soak Temp:      ', 0
+soak_temp_num:        db '      xxx C     ', 0
+
+reflow_time_display:  db 'Reflow Time: xxx', 0
+reflow_time_num:      db '      xxx  s    ', 0
+
+reflow_temp_display:  db 'Reflow Temp: xxx', 0
+reflow_temp_num:      db '      xxx C     ', 0
 
 	; After initialization the program stays in this 'forever' loop
 loop:
