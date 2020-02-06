@@ -2,11 +2,13 @@ $NOLIST
 $MOD9351
 $LIST
 
+; Clock speed
+XTAL EQU 7373000
 ;TIMER 0 AND 1 INCLUDED IN timers.inc ;
 
 ; Serial
 BAUD equ 115200
-BRVAL EQU ((CLK/BAUD)-16)
+BRVAL EQU ((XTAL/BAUD)-16)
 ; SPI
 CE_ADC    EQU  P2.7
 MY_MOSI   EQU  P2.6
@@ -58,7 +60,7 @@ dseg at 0x30
 PWM_Duty_Cycle255: ds 1
 PWM_Cycle_Count: ds 1
 ; Timing Variable
-Count10ms: ds 1
+Count1ms: ds 1
 set_ones:  ds 1 ; The BCD counter incrememted in the ISR and displayed in the main loop
 set_tens: ds 1
 set_hundreds: ds 1

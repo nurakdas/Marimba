@@ -12,14 +12,14 @@
 ; To set the duty cycle of the PWM, change the value of PWM_Duty_Cycle255
 ; 0 is 0% (always off), 127 is 50%, 255 is 100% (full beans)
 
-CLK           EQU 7373000 ; Microcontroller system clock frequency in Hz
+; Microcontroller system clock frequency in Hz must be declared as "XTAL"
 PWM_BASE_FREQ EQU 20 ; Hz frequency of PWM waveform
 TIMER0_RATE   EQU (PWM_BASE_FREQ*256) ; 256 point time resolution
-TIMER0_RELOAD EQU ((65536-(CLK/(2*TIMER0_RATE))))
-TIMER1_RATE   EQU 100 ; 100Hz, for a timer tick of 10ms
-TIMER1_RELOAD EQU ((65536-(CLK/(2*TIMER1_RATE))))
+TIMER0_RELOAD EQU ((65536-(XTAL/(2*TIMER0_RATE))))
+TIMER1_RATE   EQU 100 ; 1000Hz, for a timer interrupt every 10ms
+TIMER1_RELOAD EQU ((65536-(XTAL/(2*TIMER1_RATE))))
 
-PWM_OUTPUT equ P1.7
+PWM_OUTPUT EQU P1.7
 
 Timer0_Init:
 	mov a, TMOD
@@ -90,7 +90,11 @@ Timer1_ISR:
 
 	; Increment the 8-bit 10-mili-second counter
 	inc Count10ms
-
+	; The following are for the button_FSM_test.asm program
+	inc FSM1_timer
+	inc FSM2_timer
+	inc FSM3_timer
+	inc FSM4_timer
 Inc_Done:
 	; Check if half second has passed
 	mov a, Count10ms
