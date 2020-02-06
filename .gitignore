@@ -6,3 +6,4 @@
 *.lst
 *.hex
 *.bin
+.vs
