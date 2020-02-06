@@ -16,7 +16,7 @@
 PWM_BASE_FREQ EQU 20 ; Hz frequency of PWM waveform
 TIMER0_RATE   EQU (PWM_BASE_FREQ*256) ; 256 point time resolution
 TIMER0_RELOAD EQU ((65536-(XTAL/(2*TIMER0_RATE))))
-TIMER1_RATE   EQU 100 ; 1000Hz, for a timer interrupt every 10ms
+TIMER1_RATE   EQU 100 ; 100Hz, for a timer interrupt every 10ms
 TIMER1_RELOAD EQU ((65536-(XTAL/(2*TIMER1_RATE))))
 
 PWM_OUTPUT EQU P1.7
