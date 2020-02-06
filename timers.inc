@@ -38,6 +38,8 @@ Timer0_Init:
 Timer0_ISR:
 	mov TH0, #high(TIMER0_RELOAD)
 	mov TL0, #low(TIMER0_RELOAD)
+	push acc
+	push psw
     ; cpl P1.4 ; for debugging
     mov a, PWM_Duty_Cycle255
     jnz TTCheck_Full_Cycle
@@ -60,6 +62,8 @@ TTCheck_Cycle_Count2:
     cjne a, PWM_Duty_Cycle255, Timer0_ISR_END
     clr PWM_OUTPUT
 Timer0_ISR_END:
+	pop psw
+	pop acc
 	reti
 
 
