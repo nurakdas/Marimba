@@ -21,7 +21,7 @@ Display_init_main_screen MAC
     Send_Constant_String(set_display2)
 ENDMAC
 
-; Display_main_screen_temp(temperature)
+; Display_main_screen_temp(temperature_var, state_time_var, total_time_var)
 Display_update_main_screen MAC
     ; display temperature
     Set_Cursor(1,11)

@@ -184,7 +184,7 @@ endmac
 	mov a, r0
 	anl a, #0fh
 	orl a, #30h
-	lcall WriteData
+	lcall ?WriteData
 	pop acc
 	ret
 
@@ -202,7 +202,7 @@ endmac
 	anl a, #0f0h
 	swap a
 	orl a, #30h
-	lcall WriteData
+	lcall ?WriteData
 	pop acc
 	ret
 
