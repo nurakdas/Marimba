@@ -328,7 +328,12 @@ loop:
     mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
 	mov a, FSM_state_decider
-    Display_init_main_screen(display_mode_standby)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_standby) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
 FSM_RESET:
     mov a, FSM_state_decider
     cjne a, #0, FSM_RAMP_TO_SOAK
@@ -342,11 +347,23 @@ FSM_RESET:
     clr B4_flag_bit
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, #0, #0)
+    ; Update temperature reading
+    Set_Cursor(1,11)
+    mov a, x
+    lcall Hex_to_bcd_8bit
+    ; BCD is stored in [r1, r0]
+    Display_Lower_BCD(r1)
+    Display_BCD(r0)
+    ; done updating temperature reading
     jnb B1_flag_bit, FSM_RESET
 	inc FSM_state_decider
     clr B1_flag_bit
-    Display_init_main_screen(display_mode_ramp1)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_ramp1) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     mov a, FSM_state_decider
@@ -354,7 +371,7 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
 	mov PWM_Duty_Cycle255, #255
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, Count_state, Count1s)
+    lcall Display_update_main_screen
     clr a
     mov a, Count_state
     cjne a, #60, Continue
@@ -364,6 +381,13 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
 
 FSM_ERROR:
     mov PWM_Duty_Cycle255, #0
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_error) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
+
     sjmp $
 
 Continue:
@@ -374,23 +398,34 @@ Continue:
     inc FSM_state_decider
     clr a
     mov Count_state, a
-    Display_init_main_screen(display_mode_soak)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_soak) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
     ;check for conditions and keep calling measure_temp
       ;stop around 150 +-20 degrees
+
 FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 seconds
 	; check if it's 50C or above at 60 seconds
     mov a, FSM_state_decider
 	  cjne a, #2, FSM_RAMP_TO_REFLOW
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, Count_state, Count1s)
+    lcall Display_update_main_screen
     mov PWM_Duty_Cycle255, #127
     mov a, Count_state
     cjne a, #80, FSM_HOLD_TEMP_AT_SOAK
 	  inc FSM_state_decider
     clr a
     mov Count_state, a
-    Display_init_main_screen(display_mode_ramp2)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_ramp2) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
 
 FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
@@ -398,7 +433,7 @@ FSM_RAMP_TO_REFLOW:
 	cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, Count_state, Count1s)
+    lcall Display_update_main_screen
     mov PWM_Duty_Cycle255, #255
     clr a
     load_y(230)
@@ -407,7 +442,12 @@ FSM_RAMP_TO_REFLOW:
 	inc FSM_state_decider
     clr a
     mov Count_state, a
-    Display_init_main_screen(display_mode_reflow)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_reflow) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
 
 FSM_HOLD_TEMP_AT_REFLOW:
 	; KEEP THE TEMP ;
@@ -415,9 +455,14 @@ FSM_HOLD_TEMP_AT_REFLOW:
 	cjne a, #4, FSM_COOLDOWN
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, Count_state, Count1s)
+    lcall Display_update_main_screen
 	inc FSM_state_decider
-    Display_init_main_screen(display_mode_cooldown)
+    ; Display_init_main_screen
+    Set_Cursor(1,1)
+    Send_Constant_String(display_mode_cooldown) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(set_display2)
+    ; End Display_init_main_screen
 
 FSM_COOLDOWN:
 	; SHUT;
@@ -425,7 +470,7 @@ FSM_COOLDOWN:
     cjne a, #5, FSM_DONE
     Read_MCP3008(0)
     lcall Calculate_Temp
-    Display_update_main_screen(x, Count_state, Count1s)
+    lcall Display_update_main_screen
     mov PWM_Duty_Cycle255, #0
     load_y(30)
     lcall x_lteq_y
