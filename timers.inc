@@ -102,10 +102,18 @@ Timer1_ISR:
 Inc_Done:
 	; Check if half second has passed
 	mov a, Count10ms
-	cjne a, #50, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
+	cjne a, #100, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
 
-	; 500 milliseconds have passed.  Set a flag so the main program knows
-	setb half_seconds_flag ; Let the main program know half second had passed
+	; 1 second has passed.  Set a flag so the main program knows, and increment
+	; the seconds counter
+	setb seconds_flag ; Let the main program know a second had passed
+	inc Count_state
+	mov a, Count1s+0
+	clr c
+	addc a, #1
+	mov Count1s+0, a
+	mov a, Count1s+1
+
 	; cpl P1.5 ; For debugging
 	; Reset to zero the 10-milli-seconds counter, it is a 8-bit variable
 	mov Count10ms, #0
