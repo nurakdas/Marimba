@@ -2,7 +2,7 @@
 ;                           1234567890123456
 set_soak_display1:      db 'Set Soak:       ', 0
 set_reflow_display1:    db 'Set Reflow:     ', 0
-set_display2:           db 'xxx s at xxx ', 0xDF, 'C ', 0 // 0xDF is degree symbol code
+set_display2:           db 'xxx s at xxx ', 0xDF, 'C ', 0 ; 0xDF is degree symbol code
 
 display_mode_standby:   db 'Standby   xxx ', 0xDF, 'C', 0
 display_mode_ramp1:     db 'Ramp 1    xxx ', 0xDF, 'C', 0

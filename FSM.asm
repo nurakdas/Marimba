@@ -4,10 +4,10 @@ $LIST
 
 ; Clock speed
 XTAL EQU 7373000
-;TIMER 0 AND 1 INCLUDED IN timers.inc ;
+; TIMER 0 AND 1 INCLUDED IN timers.inc
 
 ; Serial
-BAUD equ 115200
+BAUD EQU 115200
 BRVAL EQU ((XTAL/BAUD)-16)
 ; SPI
 CE_ADC    EQU  P2.7
@@ -15,22 +15,20 @@ MY_MOSI   EQU  P2.6
 MY_MISO   EQU  P2.5
 MY_SCLK   EQU  P2.4
 ; Pin Assignments
-LCD_RS equ P0.7
-LCD_RW equ P3.0
-LCD_E  equ P3.1
-LCD_D4 equ P2.0
-LCD_D5 equ P2.1
-LCD_D6 equ P2.2
-LCD_D7 equ P2.3
-; BUTTONS
-SELECT_BUTTON   EQU P1.7
-HUNDREDS_BUTTON EQU P1.6
-TENS_BUTTON     EQU P1.4
-ONES_BUTTON     EQU P1.3
+LCD_RS equ P0.5
+LCD_RW equ P0.6
+LCD_E  equ P0.7
+LCD_D4 equ P1.2
+LCD_D5 equ P1.3
+LCD_D6 equ P1.4
+LCD_D7 equ P1.6
+; Button ADC channels
+B1_ADC equ 1
+B2_ADC equ 2
+B3_ADC equ 3
+B4_ADC equ 4
 
-;START_BUTTON    EQU P?.?
-;KILL_SWITCH:    EQU P?.?
-
+; VECTOR TABLE =================================================================
 ; Reset vector
 org 0x0000
     ljmp main
@@ -55,58 +53,69 @@ org 0x001B
 org 0x0023
 	reti
 
+; ==============================================================================
 dseg at 0x30
 ; PWM output (to oven) variables
 PWM_Duty_Cycle255: ds 1
 PWM_Cycle_Count: ds 1
-; Timing Variable
-Count1ms: ds 1
-set_ones:  ds 1 ; The BCD counter incrememted in the ISR and displayed in the main loop
-set_tens: ds 1
-set_hundreds: ds 1
+; Timing Variables
+Count10ms: ds 1
+Count1s: ds 2 ; 2 byte value
+Count_state: ds 1
 
-soak_temp_total: ds 1
-soak_time_total: ds 1
-reflow_temp_total: ds 1
-reflow_time_total: ds 1
+;soak_time_total: ds 1
+;reflow_time_total: ds 1
 
+; Temperature profile parameters
 soak_temp: ds 1
 soak_time: ds 1
 reflow_temp: ds 1
 reflow_time: ds 1
 
-current_parameter: ds 1
-
-; Each FSM has its own timer
-; Each FSM has its own state counter
 FSM_state_decider: ds 1 ; HELPS US SEE WHICH STATE WE ARE IN
-
-; Three counters to display.
-; THIS WILL BE CHANGED ACCORDING TO OUR OWN KEYS ;
-Count1:     ds 1 ; Incremented/decremented when KEY1 is pressed.
-Count2:     ds 1 ; Incremented/decremented when KEY2 is pressed.
-Count3:     ds 1 ; Incremented every second. Reset to zero when KEY3 is pressed.
+; Button FSM Variables:
+; Each FSM has its own timer and its own state counter
+BFSM1_state: ds 1
+BFSM2_state: ds 1
+BFSM3_state: ds 1
+BFSM4_state: ds 1
+BFSM1_timer: ds 1
+BFSM2_timer: ds 1
+BFSM3_timer: ds 1
+BFSM4_timer: ds 1
+; 32 bit Math variables:
 x:	ds 4
 y:	ds 4
 bcd:ds 5
-Result: ds 4
+; ADC reading
+MCP3008_reading: ds 2
 
 bseg
 ; Flag set by timer 1 every half second (can be changed if needed)
-half_seconds_flag: dbit 1
+seconds_flag: dbit 1
+; Buttons raw flag
+Button1_raw: dbit 1
+Button2_raw: dbit 1
+Button3_raw: dbit 1
+Button4_raw: dbit 1
 ; For each pushbutton we have a flag.  The corresponding FSM will set this
 ; flags to one when a valid press of the pushbutton is detected.
 ; THIS WILL BE CHANGED ACCORDING TO OUR OWN KEYS ;
-Key1_flag: dbit 1
-Key2_flag: dbit 1
-Key3_flag: dbit 1
+B1_flag_bit: dbit 1
+B2_flag_bit: dbit 1
+B3_flag_bit: dbit 1
+B4_flag_bit: dbit 1
 mf:	dbit 1
 
+; ==============================================================================
 cseg
 $NOLIST
-$include(LCD_4bit_LPC9351.inc) ; A library of LCD related functions and utility macros
+$include(LCD_4bit_LPC9351.inc) ; A library of LCD functions and utility macros
 $include(math32.inc)
 $include(timers.inc)
+$include(button_ops.inc)
+$include(soundinit.inc)
+$include(LCD_ops.inc)
 $LIST
 
 ; The 8-bit hex number passed in the accumulator is converted to
@@ -124,14 +133,25 @@ Hex_to_bcd_8bit:
 	mov R0, a
 	ret
 
-INI_SPI:
-	setb MY_MISO	 	  ; Make MISO an input pin
-	clr MY_SCLK           ; Mode 0,0 default
-	ret
+; SPI ==========================================================================
+;Init_SPI:
+	;setb MY_MISO	 	  ; Make MISO an input pin
+	;clr MY_SCLK           ; Mode 0,0 default
+	;ret
+Init_SPI:
+    ; Configure MOSI (P2.2), CS* (P2.4), and SPICLK (P2.5) as push-pull outputs (see table 42, page 51)
+    anl P2M1, #low(not(00110100B))
+    orl P2M2, #00110100B
+    ; Configure MISO (P2.3) as input (see table 42, page 51)
+    orl P2M1, #00001000B
+    anl P2M2, #low(not(00001000B))
+    ; Configure SPI
+    mov SPCTL, #11010000B ; Ignore /SS, Enable SPI, DORD=0, Master=1, CPOL=0, CPHA=0, clk/4
+    ret
 
 DO_SPI_G:
 	push acc
-	mov R1,#0			  ; Received byte stored in R1
+	mov R1, #0			  ; Received byte stored in R1
 	mov R2, #8            ; Loop counter (8-bits)
 
 DO_SPI_G_LOOP:
@@ -149,7 +169,52 @@ DO_SPI_G_LOOP:
 	pop acc
 	ret
 
-	; Configure the serial port and baud rate
+;Read_MCP3008(channel)
+Read_MCP3008 MAC
+    push ar7
+    mov r7, #%0
+    lcall ?Read_MCP3008
+    pop ar7
+ENDMAC
+
+?Read_MCP3008:
+	mov r0, #1 ; first byte to send
+	clr S_CE_ADC
+	lcall DO_SPI_G
+	; ignore received data for that frame; it's garbage
+    mov a, r7 ; get channel to read
+    swap a
+    orl a, #0x80
+	mov r0, a ; specify single ended read on channel specified
+	lcall DO_SPI_G
+	mov a, r1 ; r1 holds received byte
+	anl a, #0x03 ; only keep 2 least significant bits
+	mov MCP3008_reading+1, a ; save upper 2 bits
+	mov r0, #0x55 ; don't care what is sent here (so send alternating bits)
+	lcall DO_SPI_G
+	mov a, r1 ; r1 holds received byte
+	mov MCP3008_reading+0, a ; save lower 2 bits
+	setb S_CE_ADC
+	ret
+
+Calculate_Temp:
+	mov x, MCP3008_reading
+	mov x+1, MCP3008_reading+1
+	mov x+2, #0
+	mov x+3, #0
+	load_y(311669)
+	lcall mul32
+	load_y(1000000)
+	lcall div32
+	lcall hex2bcd
+	; Send_BCD(bcd)
+	; mov a, #'\r'
+	; lcall putchar
+	; mov a, #'\n'
+	; lcall putchar
+	ret
+; SERIAL =======================================================================
+; Configure the serial port and baud rate
 InitSerialPort:
 	mov	BRGCON,#0x00
 	mov	BRGR1,#high(BRVAL)
@@ -160,7 +225,9 @@ InitSerialPort:
 	mov	P1M2,#0x00 ; Enable pins RxD and TXD
 	ret
 
-	; Send a character using the serial port
+; Send a character using the serial port
+;JESUS'S NEW CODE IMPLEMENTS PUTCHAR AND GETCHAR DIFFERENTLY;
+;IF THEY DON'T WORK, USE THE NEW ONES WHICH HAVE L1 COMPONENTS;
 putchar:
     jnb TI, putchar
     clr TI
@@ -173,146 +240,200 @@ getchar:
 	mov a, SBUF
 	ret
 
-SendString:
-    clr A
-    movc A, @A+DPTR
-    jz SendStringDone
-    lcall putchar
-    inc DPTR
-    sjmp SendString
+; BUTTONS ======================================================================
+Check_Buttons:
+    Read_MCP3008(B1_ADC)
+    mov a, MCP3008_reading+1 ; get upper byte of ADC reading
+    rr a ; get MSB of reading (the 2^9=512 valued bit)
+    jnz button1_released ; jumpd if the ADC reading is less than 512
+    setb Button1_raw
+    sjmp read_button2
+button1_released:
+    clr Button1_raw
+read_button2:
+    Read_MCP3008(B2_ADC)
+    mov a, MCP3008_reading+1 ; get upper byte of ADC reading
+    rr a ; get MSB of reading (the 2^9=512 valued bit)
+    jnz button2_released ; jumpd if the ADC reading is less than 512
+    setb Button2_raw
+    sjmp read_button3
+button2_released:
+    clr Button2_raw
+read_button3:
+    Read_MCP3008(B3_ADC)
+    mov a, MCP3008_reading+1 ; get upper byte of ADC reading
+    rr a ; get MSB of reading (the 2^9=512 valued bit)
+    jnz button3_released ; jumpd if the ADC reading is less than 512
+    setb Button3_raw
+    sjmp read_button4
+button3_released:
+    clr Button3_raw
+read_button4:
+    Read_MCP3008(B4_ADC)
+    mov a, MCP3008_reading+1 ; get upper byte of ADC reading
+    rr a ; get MSB of reading (the 2^9=512 valued bit)
+    jnz button4_released ; jumpd if the ADC reading is less than 512
+    setb Button4_raw
+    sjmp read_button_done
+button4_released:
+    clr Button4_raw
 
-SendStringDone:
+read_button_done:
+    Button_FSM(BFSM1_state, BFSM1_timer, Button1_raw, B1_flag_bit)
+    Button_FSM(BFSM2_state, BFSM2_timer, Button2_raw, B2_flag_bit)
+    Button_FSM(BFSM3_state, BFSM3_timer, Button3_raw, B3_flag_bit)
+    Button_FSM(BFSM4_state, BFSM4_timer, Button4_raw, B4_flag_bit)
     ret
-;---------------------------------;
-; Main program. Includes hardware ;
-; initialization and 'forever'    ;
-; loop.                           ;
-;---------------------------------;
+
+; MAIN =========================================================================
 main:
 	; Initialization of hardware
     mov SP, #0x7F
     lcall Timer0_Init
-	lcall LCD_4BIT
+    lcall LCD_4BIT
     lcall InitSerialPort
     lcall SendString
-    lcall INI_SPI
-    ; Turn off all the LEDs
-    ;mov LEDRA, #0 ; LEDRA is bit addressable
-    ;mov LEDRB, #0 ; LEDRB is NOT bit addresable
-    setb EA   ; Enable Global interrupts
+    lcall Init_SPI
+    setb EA ; Enable Global interrupts
 
     ; Initialize variables
-    mov FSM_state_decider, #0
-    mov Count1, #0
-    mov Count2, #0
-    mov Count3, #0
+    ; Default Temperature profile parameters
+    mov soak_temp, #80
+    mov soak_time, #60
+    mov reflow_temp, #230
+    mov reflow_time, #40
+    clr a
+    mov PWM_Duty_Cycle255, a
+    mov Count10ms, a
+    mov Count1s+0, a
+    mov Count1s+1, a
+    mov Count_state, a
+    mov FSM_state_decider, a
+    mov BFSM1_state, a
+    mov BFSM2_state, a
+    mov BFSM3_state, a
+    mov BFSM4_state, a
+    mov BFSM1_timer, a
+    mov BFSM2_timer, a
+    mov BFSM3_timer, a
+    mov BFSM4_timer,a
+    mov MCP3008_reading+0, a
+    mov MCP3008_reading+1, a
+    Load_X(0)
+    Load_y(0)
 
-    ; DISPLAY INITIALISATION ;
-soak_time_display:    db 'Soak Time: xxx s', 0
-soak_time_num:        db '      xxx  s    ', 0
-
-soak_temp_display:    db 'Soak Temp:      ', 0
-soak_temp_num:        db '      xxx C     ', 0
-
-reflow_time_display:  db 'Reflow Time: xxx', 0
-reflow_time_num:      db '      xxx  s    ', 0
-
-reflow_temp_display:  db 'Reflow Temp: xxx', 0
-reflow_temp_num:      db '      xxx C     ', 0
 
 	; After initialization the program stays in this 'forever' loop
 loop:
     mov FSM_state_decider, #0
-
-    ; PUT ALL INITIALISATIONS HERE ;
-    ;------------------------------;
+    mov PWM_Duty_Cycle255, #0
 	mov a, FSM_state_decider
+    Display_init_main_screen(display_mode_standby)
 FSM_RESET:
-	; SET TIMER TO 0 ;
-	; SET TEMP TO ROOM TEMP ;
-	; CLEAR THE DISPLAY FOR WHAT STATE WE'RE IN ;
-	cjne a, #0, FSM_INITIALISE
-loop0:
-	lcall Measure_temp
-	;jb SELECT_BUTTON, loop0
-	;Wait_Milli_Seconds(#50)
-	;jb SELECT_BUTTON, loop0
-	;jnb SELECT_BUTTON, $
+    mov a, FSM_state_decider
+    cjne a, #0, FSM_RAMP_TO_SOAK
+    clr a
+    mov Count1s, a
+    mov Count1s+1, a
+    mov Count_state, a
+    lcall Check_Buttons
+    clr B2_flag_bit
+    clr B3_flag_bit
+    clr B4_flag_bit
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, #0, #0)
+    jnb B1_flag_bit, FSM_RESET
 	inc FSM_state_decider
-FSM_INITIALISE:
-	; WE CAN USE THIS STATE AS A DEBOUNCE STATE FOR THE BUTTON WE PRESS TO START THE PROGRAM ;
-	cjne a, #1, FSM_RAMP_TO_SOAK
+    clr B1_flag_bit
+    Display_init_main_screen(display_mode_ramp1)
 
-		; Turn on the oven ;
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
-	cjne a, #2, FSM_HOLD_TEMP_AT_SOAK
-		; HEAT THE OVEN ;
+    mov a, FSM_state_decider
+	cjne a, #1, FSM_HOLD_TEMP_AT_SOAK
+	mov PWM_Duty_Cycle255, #255
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, Count_state, Count1s)
+    clr a
+    mov a, Count_state
+    cjne a, #60, Continue
+    load_y(50)
+    lcall x_lt_y
+    jnb mf, Continue
 
+FSM_ERROR:
+    mov PWM_Duty_Cycle255, #0
+    sjmp $
+
+Continue:
+    clr a
+    load_y(150)
+    lcall x_gteq_y
+    jnb mf, FSM_RAMP_TO_SOAK
+    inc FSM_state_decider
+    clr a
+    mov Count_state, a
+    Display_init_main_screen(display_mode_soak)
+    ;check for conditions and keep calling measure_temp
+      ;stop around 150 +-20 degrees
 FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 seconds
-	; check if it's 50C or above at 60 seconds ;
-	cjne a, #3, FSM_RAMP_TO_REFLOW
-	inc FSM_state_decider
-	sjmp FSM_done
+	; check if it's 50C or above at 60 seconds
+    mov a, FSM_state_decider
+	  cjne a, #2, FSM_RAMP_TO_REFLOW
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, Count_state, Count1s)
+    mov PWM_Duty_Cycle255, #127
+    mov a, Count_state
+    cjne a, #80, FSM_HOLD_TEMP_AT_SOAK
+	  inc FSM_state_decider
+    clr a
+    mov Count_state, a
+    Display_init_main_screen(display_mode_ramp2)
+
 FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
-	cjne a, #4, FSM_HOLD_TEMP_AT_REFLOW
-	;jnb KEY.1, FSM1_done
-	;setb Key1_flag ; Suscesfully detected a valid KEY1 press/release
+    mov a, FSM_state_decider
+	cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, Count_state, Count1s)
+    mov PWM_Duty_Cycle255, #255
+    clr a
+    load_y(230)
+    lcall x_gteq_y
+    jnb mf, FSM_HOLD_TEMP_AT_REFLOW
 	inc FSM_state_decider
+    clr a
+    mov Count_state, a
+    Display_init_main_screen(display_mode_reflow)
+
 FSM_HOLD_TEMP_AT_REFLOW:
 	; KEEP THE TEMP ;
-	cjne a, #5, FSM_COOLDOWN
+    mov a, FSM_state_decider
+	cjne a, #4, FSM_COOLDOWN
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, Count_state, Count1s)
 	inc FSM_state_decider
+    Display_init_main_screen(display_mode_cooldown)
+
 FSM_COOLDOWN:
-	; SHUT EVERYTHING DOWN ;
-FSM_done:
-	mov FSM_state_decider, #0
+	; SHUT;
+    mov a, FSM_state_decider
+    cjne a, #5, FSM_DONE
+    Read_MCP3008(0)
+    lcall Calculate_Temp
+    Display_update_main_screen(x, Count_state, Count1s)
+    mov PWM_Duty_Cycle255, #0
+    load_y(30)
+    lcall x_lteq_y
+    jnb mf, FSM_COOLDOWN
+    clr a
+    mov Count_state, a
+
+FSM_DONE:
 	ljmp loop
-
-Measure_temp:
-	clr CE_ADC
-	mov R0, #00000001B; Start bit:1
-	lcall DO_SPI_G
-	mov R0, #10000000B; Single ended, read channel 0
-	lcall DO_SPI_G
-	mov a, R1          ; R1 contains bits 8 and 9
-	anl a, #00000011B  ; We need only the two least significant bits
-	mov Result+1, a    ; Save result high.
-	mov R0, #55H		; It doesn't matter what we transmit...
-	lcall DO_SPI_G
-	mov Result, R1     ; R1 contains bits 0 to 7.  Save result low.
-	setb CE_ADC
-	lcall Delay
-	lcall Calculate
-	mov a, FSM_state_decider
-	ret
-
-Delay:
-	mov R2, #89
-Le3:mov R1, #250
-Le2:mov R0, #166
-Le1:djnz R0, Le1 ; 3 cycles->3*45.21123ns*166=22.51519us
-    djnz R1, Le2 ; 22.51519us*250=5.629ms
-    djnz R2, Le3 ; 5.629ms*178=1s (approximately)
-    ret
-
-Calculate:
-	mov x, Result
-	mov x+1, Result+1
-	mov x+2, #0
-	mov x+3, #0
-	load_y(410)
-	lcall mul32
-	load_y(1023)
-	lcall div32
-	load_y(273)
-	lcall sub32
-	lcall hex2bcd
-	; Send_BCD(bcd)
-	mov a, #'\r'
-	lcall putchar
-	mov a, #'\n'
-	lcall putchar
-	ret
 
 END
