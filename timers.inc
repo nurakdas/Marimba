@@ -95,10 +95,10 @@ Timer1_ISR:
 	; Increment the 8-bit 10-mili-second counter
 	inc Count10ms
 	; The following are for the button_FSM_test.asm program
-	inc FSM1_timer
-	inc FSM2_timer
-	inc FSM3_timer
-	inc FSM4_timer
+	inc BFSM1_timer
+	inc BFSM2_timer
+	inc BFSM3_timer
+	inc BFSM4_timer
 Inc_Done:
 	; Check if half second has passed
 	mov a, Count10ms

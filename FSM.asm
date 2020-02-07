@@ -3,8 +3,12 @@ $MOD9351
 $LIST
 
 ; Clock speed
-XTAL EQU 7373000
+XTAL EQU 14746000
 ; TIMER 0 AND 1 INCLUDED IN timers.inc
+
+; FOR SOUNDINIT.inc ;
+CCU_RATE    EQU 22050     ; 22050Hz is the sampling rate of the wav file we are playing
+CCU_RELOAD  EQU ((65536-((XTAL/(2*CCU_RATE)))))
 
 ; Serial
 BAUD EQU 115200
@@ -27,6 +31,9 @@ B1_ADC equ 1
 B2_ADC equ 2
 B3_ADC equ 3
 B4_ADC equ 4
+; soundinit.inc buttons
+FLASH_CE    EQU P1.0
+SOUND       EQU P1.1
 
 ; VECTOR TABLE =================================================================
 ; Reset vector
@@ -62,6 +69,9 @@ PWM_Cycle_Count: ds 1
 Count10ms: ds 1
 Count1s: ds 2 ; 2 byte value
 Count_state: ds 1
+
+; for soundinit.inc ;
+w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 
 ;soak_time_total: ds 1
 ;reflow_time_total: ds 1
@@ -179,7 +189,7 @@ ENDMAC
 
 ?Read_MCP3008:
 	mov r0, #1 ; first byte to send
-	clr S_CE_ADC
+	clr CE_ADC
 	lcall DO_SPI_G
 	; ignore received data for that frame; it's garbage
     mov a, r7 ; get channel to read
@@ -194,7 +204,7 @@ ENDMAC
 	lcall DO_SPI_G
 	mov a, r1 ; r1 holds received byte
 	mov MCP3008_reading+0, a ; save lower 2 bits
-	setb S_CE_ADC
+	setb CE_ADC
 	ret
 
 Calculate_Temp:
@@ -330,9 +340,9 @@ loop:
 	mov a, FSM_state_decider
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_standby) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_standby) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
 FSM_RESET:
     mov a, FSM_state_decider
@@ -352,22 +362,22 @@ FSM_RESET:
     mov a, x
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
     ; done updating temperature reading
     jnb B1_flag_bit, FSM_RESET
 	inc FSM_state_decider
     clr B1_flag_bit
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_ramp1) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_ramp1) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     mov a, FSM_state_decider
-	cjne a, #1, FSM_HOLD_TEMP_AT_SOAK
+	cjne a, #1, FSM_HOLD_TEMP_AT_SOAK_JUMP_TO
 	mov PWM_Duty_Cycle255, #255
     Read_MCP3008(0)
     lcall Calculate_Temp
@@ -383,29 +393,35 @@ FSM_ERROR:
     mov PWM_Duty_Cycle255, #0
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_error) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_error) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
-
     sjmp $
+    
+FSM_HOLD_TEMP_AT_SOAK_JUMP_TO:
+	ljmp FSM_HOLD_TEMP_AT_SOAK
 
 Continue:
     clr a
     load_y(150)
     lcall x_gteq_y
-    jnb mf, FSM_RAMP_TO_SOAK
+    jnb mf, FSM_RAMP_TO_SOAK_JUMP_TO
     inc FSM_state_decider
     clr a
     mov Count_state, a
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_soak) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_soak) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
+    sjmp FSM_HOLD_TEMP_AT_SOAK
     ; End Display_init_main_screen
     ;check for conditions and keep calling measure_temp
       ;stop around 150 +-20 degrees
+
+FSM_RAMP_TO_SOAK_JUMP_TO:
+	ljmp FSM_RAMP_TO_SOAK
 
 FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 seconds
 	; check if it's 50C or above at 60 seconds
@@ -422,9 +438,9 @@ FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 s
     mov Count_state, a
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_ramp2) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_ramp2) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
 
 FSM_RAMP_TO_REFLOW:
@@ -444,9 +460,9 @@ FSM_RAMP_TO_REFLOW:
     mov Count_state, a
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_reflow) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_reflow) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
 
 FSM_HOLD_TEMP_AT_REFLOW:
@@ -459,9 +475,9 @@ FSM_HOLD_TEMP_AT_REFLOW:
 	inc FSM_state_decider
     ; Display_init_main_screen
     Set_Cursor(1,1)
-    Send_Constant_String(display_mode_cooldown) ; Display the mode (and temp placeholder)
+    Send_Constant_String(#display_mode_cooldown) ; Display the mode (and temp placeholder)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
 
 FSM_COOLDOWN:

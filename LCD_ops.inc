@@ -34,39 +34,39 @@ Display_update_main_screen:
     mov a, x
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
 
     ; display state time
     Set_Cursor(2,1)
     mov a, Count_state
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
 
     ; display total time
     Set_Cursor(2,10)
     mov a, Count1s
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
     ret
 
 ; Set Screen ===================================================================
 Display_init_set_soak_screen:
     Set_Cursor(1,1)
-    Send_Constant_String(set_soak_display1)
+    Send_Constant_String(#set_soak_display1)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ret
 
 Display_init_set_reflow_screen:
     Set_Cursor(1,1)
-    Send_Constant_String(set_reflow_display1)
+    Send_Constant_String(#set_reflow_display1)
     Set_Cursor(2,1)
-    Send_Constant_String(set_display2)
+    Send_Constant_String(#set_display2)
     ret
 
 ; Display_update_set_screen(time, temp)
@@ -75,13 +75,13 @@ Display_update_set_screen MAC
     mov a, %0
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
 
     Set_Cursor(2, 10)
     mov a, %1
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(r1)
-    Display_BCD(r0)
+    Display_Lower_BCD(ar1)
+    Display_BCD(ar0)
 ENDMAC

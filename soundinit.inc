@@ -9,6 +9,19 @@
 ; manner similar to the timer 2   ;
 ; available in other 8051s        ;
 ;---------------------------------;
+
+WRITE_ENABLE     EQU 0x06  ; Address:0 Dummy:0 Num:0
+WRITE_DISABLE    EQU 0x04  ; Address:0 Dummy:0 Num:0
+READ_STATUS      EQU 0x05  ; Address:0 Dummy:0 Num:1 to infinite
+READ_BYTES       EQU 0x03  ; Address:3 Dummy:0 Num:1 to infinite
+READ_SILICON_ID  EQU 0xab  ; Address:0 Dummy:3 Num:1 to infinite
+FAST_READ        EQU 0x0b  ; Address:3 Dummy:1 Num:1 to infinite
+WRITE_STATUS     EQU 0x01  ; Address:0 Dummy:0 Num:1
+WRITE_BYTES      EQU 0x02  ; Address:3 Dummy:0 Num:1 to 256
+ERASE_ALL        EQU 0xc7  ; Address:0 Dummy:0 Num:0
+ERASE_BLOCK      EQU 0xd8  ; Address:3 Dummy:0 Num:0
+READ_DEVICE_ID   EQU 0x9f  ; Address:0 Dummy:2 Num:1 to infinite
+
 CCU_Init:
 	mov TH2, #high(CCU_RELOAD)
 	mov TL2, #low(CCU_RELOAD)
