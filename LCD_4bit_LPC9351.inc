@@ -164,6 +164,13 @@ endmac
 ;---------------------------------;
 ; Display a BCD number in the LCD ;
 ;---------------------------------;
+Display_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Display_BCD
+	pop ar0
+endmac
+
 ?Display_BCD:
 	; Write most significant digit
 	lcall ?Display_Upper_BCD
