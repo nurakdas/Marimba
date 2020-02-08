@@ -476,9 +476,9 @@ LCD_3BCD:
 	orl a, #'0'
 	lcall ?WriteData
 	ret
-	
+
 Display_ADC_Values:
-	; Analog input to pin P1.7
+	; Analog input to pin P2.0
 	mov x+0, AD0DAT3
 	mov x+1, #0
 	mov x+2, #0
@@ -486,7 +486,7 @@ Display_ADC_Values:
 	lcall Hex2BCD
 	Set_Cursor(2, 1)
 	lcall LCD_3BCD
-	; Analog input to pin P0.0
+	; Analog input to pin P2.1
 	mov x+0, AD0DAT2
 	mov x+1, #0
 	mov x+2, #0
@@ -494,7 +494,7 @@ Display_ADC_Values:
 	lcall Hex2BCD
 	Set_Cursor(2, 5)
 	lcall LCD_3BCD
-	; Analog input to pin P2.0
+	; Analog input to pin P0.0
 	mov x+0, AD0DAT1
 	mov x+1, #0
 	mov x+2, #0
@@ -502,7 +502,7 @@ Display_ADC_Values:
 	lcall Hex2BCD
 	Set_Cursor(2, 9)
 	lcall LCD_3BCD
-	; Analog input to pin P2.1
+	; Analog input to pin P1.7
 	mov x+0, AD0DAT0
 	mov x+1, #0
 	mov x+2, #0

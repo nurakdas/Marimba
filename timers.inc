@@ -22,7 +22,13 @@ TIMER1_RELOAD EQU ((65536-(XTAL/(2*TIMER1_RATE))))
 PWM_OUTPUT EQU P0.1
 
 dseg
+; variables program should access
+; Timing Variables
+Count1ms: ds 1
+Count1s: ds 2 ; 2 byte value
+Count_state: ds 1
 PWM_Duty_Cycle255: ds 1
+; variables program should not access
 PWM_Cycle_Count: ds 1
 internal_1ms_counter: ds 1
 extension_counter: ds 1

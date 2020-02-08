@@ -23,10 +23,10 @@ LCD_D5 equ P1.3
 LCD_D6 equ P1.4
 LCD_D7 equ P1.6
 ; Button ADC channels
-sADC equ P1.7 ;1
-B2_ADC equ P0.0 ;2
-B3_ADC equ P2.1 ;3
-B4_ADC equ P2.0 ;4
+THERMOCOUPLE_ADC_REGISTER equ AD0DAT1 ; on P0.0
+LM335_ADC_REGISTER equ AD0DAT0 ; on pin P1.7
+BUTTONS_ADC_REGISTER equ AD0DAT3 ; on pin P2.0
+; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
 FLASH_CE    EQU P1.0
 SOUND       EQU P1.1
@@ -56,19 +56,13 @@ org 0x001B
 org 0x0023
 	reti
 
-; ==============================================================================
+; DSEG and BSEG variables ======================================================
 dseg at 0x30
-; Timing Variables
-Count10ms: ds 1
-Count1s: ds 2 ; 2 byte value
-Count_state: ds 1
-
 ; for soundinit.inc ;
 w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
-
 ;soak_time_total: ds 1
 ;reflow_time_total: ds 1
-
+current_temp: ds 1
 ; Temperature profile parameters
 soak_temp: ds 1
 soak_time: ds 1
@@ -86,6 +80,7 @@ BFSM1_timer: ds 1
 BFSM2_timer: ds 1
 BFSM3_timer: ds 1
 BFSM4_timer: ds 1
+
 ; 32 bit Math variables:
 x:	ds 4
 y:	ds 4
@@ -116,7 +111,7 @@ $include(math32.inc)
 $include(timers.inc)
 $include(button_ops.inc)
 $include(soundinit.inc)
-$include(LCD_ops.inc)
+$include(LCD_ops_OLD.inc)
 $LIST
 
 ; The 8-bit hex number passed in the accumulator is converted to
@@ -134,20 +129,44 @@ Hex_to_bcd_8bit:
 	mov R0, a
 	ret
 
+; Returns temperature at thermocouple in register a
+Get_Temp:
+    ; First get cold junction temp from LM335
+    mov x+0, LM335_ADC_REGISTER
+    clr a
+    mov x+1, a
+    mov x+2, a
+    mov x+3, a
+    Load_y(333)
+    lcall mul32
+    Load_y(255)
+    lcall div32
+    Load_y(273)
+    lcall sub32
+    ; Cold-junction temp is now in x
+    mov a, THERMOCOUPLE_ADC_REGISTER
+    ; Thermocouple temp is now in a
+    add a, x+0 ; Add cold junction temp to thermocouple temp to get actual temp
+    mov current_temp, a
+    ; actual thermocouple temp is now in current_temp
+    ret
+
 ; SPI ==========================================================================
 ;Init_SPI:
 	;setb MY_MISO	 	  ; Make MISO an input pin
 	;clr MY_SCLK           ; Mode 0,0 default
 	;ret
 Init_SPI:
-    ; Configure MOSI (P2.2), CS* (P2.4), and SPICLK (P2.5) as push-pull outputs (see table 42, page 51)
+    ; Configure MOSI (P2.2), CS* (P2.4), and SPICLK (P2.5) as push-pull outputs
+    ; (see table 42, page 51)
     anl P2M1, #low(not(00110100B))
     orl P2M2, #00110100B
     ; Configure MISO (P2.3) as input (see table 42, page 51)
     orl P2M1, #00001000B
     anl P2M2, #low(not(00001000B))
     ; Configure SPI
-    mov SPCTL, #11010000B ; Ignore /SS, Enable SPI, DORD=0, Master=1, CPOL=0, CPHA=0, clk/4
+    ; Ignore /SS, Enable SPI, DORD=0, Master=1, CPOL=0, CPHA=0, clk/4
+    mov SPCTL, #11010000B
     ret
 
 ; SERIAL =======================================================================
@@ -232,12 +251,7 @@ loop:
     mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
 	mov a, FSM_state_decider
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_standby) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_standby)
 FSM_RESET:
     mov a, FSM_state_decider
     cjne a, #0, FSM_RAMP_TO_SOAK
@@ -261,88 +275,76 @@ FSM_RESET:
     jnb B1_flag_bit, FSM_RESET
 	inc FSM_state_decider
     clr B1_flag_bit
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_ramp1) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_ramp1)
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
+    ; cjne a, #1, FSM_HOLD_TEMP_AT_SOAK ; jump is too long for this
     mov a, FSM_state_decider
-	cjne a, #1, FSM_HOLD_TEMP_AT_SOAK_JUMP_TO
+    clr c
+    subb a, #1
+	jz RAMP_TO_SOAK_continue1
+    ljmp FSM_HOLD_TEMP_AT_SOAK
+RAMP_TO_SOAK_continue1:
 	mov PWM_Duty_Cycle255, #255
-    Read_MCP3008(0)
-    lcall Calculate_Temp
-    lcall Display_update_main_screen
+    lcall Get_Temp
+    Display_update_main_screen(current_temp, #0, #0)
     clr a
     mov a, Count_state
-    cjne a, #60, Continue
+    cjne a, #60, RAMP_TO_SOAK_continue2
     load_y(50)
     lcall x_lt_y
-    jnb mf, Continue
+    jnb mf, RAMP_TO_SOAK_continue2
 
 FSM_ERROR:
     mov PWM_Duty_Cycle255, #0
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_error) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_error)
     sjmp $
 
-FSM_HOLD_TEMP_AT_SOAK_JUMP_TO:
-	ljmp FSM_HOLD_TEMP_AT_SOAK
-
-Continue:
+RAMP_TO_SOAK_continue2:
     clr a
     load_y(150)
     lcall x_gteq_y
-    jnb mf, FSM_RAMP_TO_SOAK_JUMP_TO
+    ; jnb mf, FSM_RAMP_TO_SOAK ; the jump is too long for this
+    jb mf, RAMP_TO_SOAK_continue3
+    ljmp FSM_RAMP_TO_SOAK
+RAMP_TO_SOAK_continue3:
     inc FSM_state_decider
     clr a
     mov Count_state, a
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_soak) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    sjmp FSM_HOLD_TEMP_AT_SOAK
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_soak)
     ;check for conditions and keep calling measure_temp
       ;stop around 150 +-20 degrees
-
-FSM_RAMP_TO_SOAK_JUMP_TO:
-	ljmp FSM_RAMP_TO_SOAK
 
 FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 seconds
 	; check if it's 50C or above at 60 seconds
     mov a, FSM_state_decider
-	  cjne a, #2, FSM_RAMP_TO_REFLOW
-    Read_MCP3008(0)
-    lcall Calculate_Temp
-    lcall Display_update_main_screen
+	; cjne a, #2, FSM_RAMP_TO_REFLOW ; jump is too long for this
+    clr c
+    subb a, #2
+    jz HOLD_TEMP_AT_SOAK_continue1
+    ljmp FSM_RAMP_TO_REFLOW
+HOLD_TEMP_AT_SOAK_continue1:
+    lcall Get_Temp
+    Display_update_main_screen(current_temp, Count_state, Count1s)
     mov PWM_Duty_Cycle255, #51
     mov a, Count_state
     cjne a, #80, FSM_HOLD_TEMP_AT_SOAK
 	  inc FSM_state_decider
     clr a
     mov Count_state, a
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_ramp2) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_ramp2)
 
 FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
     mov a, FSM_state_decider
-	  cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW
-    Read_MCP3008(0)
-    lcall Calculate_Temp
-    lcall Display_update_main_screen
+	; cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW ; jump is too long for this
+    clr c
+    subb a, #3
+    jz RAMP_TO_REFLOW_continue1
+    ljmp FSM_HOLD_TEMP_AT_REFLOW
+RAMP_TO_REFLOW_continue1:
+    lcall Get_Temp
+    Display_update_main_screen(current_temp, Count_state, Count1s)
     mov PWM_Duty_Cycle255, #255
     clr a
     load_y(230)
@@ -351,38 +353,32 @@ FSM_RAMP_TO_REFLOW:
 	  inc FSM_state_decider
     clr a
     mov Count_state, a
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_reflow) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    Display_init_main_screen(display_mode_reflow)
 
 FSM_HOLD_TEMP_AT_REFLOW:
 	; KEEP THE TEMP ;
     mov a, FSM_state_decider
-	  cjne a, #4, FSM_COOLDOWN
-    Read_MCP3008(0)
-    lcall Calculate_Temp
-    lcall Display_update_main_screen
+    ; cjne a, #4, FSM_COOLDOWN ; jump is too long for this
+    clr c
+    subb a, #4
+    jz HOLD_TEMP_AT_REFLOW_continue1
+    ljmp FSM_COOLDOWN
+HOLD_TEMP_AT_REFLOW_continue1:
+    lcall Get_Temp
+    Display_update_main_screen(current_temp, Count_state, Count1s)
     mov PWM_Duty_Cycle255, #51
     mov a, Count_state
     cjne a, #40, FSM_HOLD_TEMP_AT_REFLOW
-	  inc FSM_state_decider
-    ; Display_init_main_screen
-    Set_Cursor(1,1)
-    Send_Constant_String(#display_mode_cooldown) ; Display the mode (and temp placeholder)
-    Set_Cursor(2,1)
-    Send_Constant_String(#set_display2)
-    ; End Display_init_main_screen
+    inc FSM_state_decider
+    Display_init_main_screen(display_mode_cooldown)
+
 
 FSM_COOLDOWN:
 	; SHUT;
     mov a, FSM_state_decider
     cjne a, #5, FSM_DONE
-    Read_MCP3008(0)
-    lcall Calculate_Temp
-    lcall Display_update_main_screen
+    lcall Get_Temp
+    Display_update_main_screen(current_temp, Count_state, Count1s)
     mov PWM_Duty_Cycle255, #0
     load_y(30)
     lcall x_lteq_y
