@@ -78,7 +78,12 @@ CCU_ISR_Done:
 	clr P2.6
 	reti
 
-  Ports_Init:
+; Initial configuration of ports.
+; After reset the default for the pins is 'Open Drain'. This routine changes
+; the pins to Quasi-bidirectional like in the original 8051. Notice that P1.2
+; and P1.3 are always 'Open Drain'. If those pins are to be used as output
+; they need a pull-up resistor.
+Ports_Init:
     ; Configure all the ports in bidirectional mode:
     mov P0M1, #00H
     mov P0M2, #00H
