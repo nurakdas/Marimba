@@ -155,7 +155,7 @@ FSM%M_state1:
 	cjne a, #1, FSM%M_state2
 	; this is the debounce state
 	mov a, %1
-	cjne a, #5, FSM%M_done ; 5 * 10 = 50 ms passed?
+	cjne a, #50, FSM%M_done ; 50 ms passed?
 	inc %0
 	sjmp FSM%M_done
 FSM%M_state2:

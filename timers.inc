@@ -16,10 +16,18 @@
 PWM_BASE_FREQ EQU 20 ; Hz frequency of PWM waveform
 TIMER0_RATE   EQU (PWM_BASE_FREQ*256) ; 256 point time resolution
 TIMER0_RELOAD EQU ((65536-(XTAL/(2*TIMER0_RATE))))
-TIMER1_RATE   EQU 100 ; 100Hz, for a timer interrupt every 10ms
+TIMER1_RATE   EQU 1000 ; 1000Hz, for a timer interrupt every 1ms
 TIMER1_RELOAD EQU ((65536-(XTAL/(2*TIMER1_RATE))))
 
 PWM_OUTPUT EQU P1.7
+
+dseg
+PWM_Duty_Cycle255: ds 1
+PWM_Cycle_Count: ds 1
+internal_1ms_counter: ds 1
+extension_counter: ds 1
+
+cseg
 
 Timer0_Init:
 	mov a, TMOD
@@ -28,8 +36,8 @@ Timer0_Init:
 	mov TMOD, a
 	mov TH0, #high(TIMER0_RELOAD)
 	mov TL0, #low(TIMER0_RELOAD)
-    clr a
-    mov PWM_Cycle_Count, a
+    mov PWM_Cycle_Count, #0
+	mov PWM_Duty_Cycle255, #0
 	; Enable the timer and interrupts
     setb ET0  ; Enable timer 0 interrupt
     setb TR0  ; Start timer 0
@@ -75,6 +83,9 @@ Timer1_Init:
 	mov TMOD, a
 	mov TH1, #high(TIMER1_RELOAD)
 	mov TL1, #low(TIMER1_RELOAD)
+	clr a
+	mov internal_1ms_counter, a
+	mov extension_counter, a
 	; Enable the timer and interrupts
     setb ET1  ; Enable timer 1 interrupt
     setb TR1  ; Start timer 1
@@ -92,31 +103,36 @@ Timer1_ISR:
 	push acc
 	push psw
 
-	; Increment the 8-bit 10-mili-second counter
-	inc Count10ms
+	; Increment the 8-bit 1 millisecond counter
+	inc Count1ms
+	inc internal_1ms_counter
 	; The following are for the button_FSM_test.asm program
 	inc BFSM1_timer
 	inc BFSM2_timer
 	inc BFSM3_timer
 	inc BFSM4_timer
-Inc_Done:
-	; Check if half second has passed
-	mov a, Count10ms
-	cjne a, #100, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
 
-	; 1 second has passed.  Set a flag so the main program knows, and increment
-	; the seconds counter
+	mov a, internal_1ms_counter
+	cjne a, #250, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
+	mov internal_1ms_counter, #0 ; reset the internal 1ms counter
+	inc extension_counter
+	; The extension_counter is incremented every 1/4 of a second
+	; Check if the extension_counter has reached 4
+	mov a, extension_counter
+	cjne a, #4, Timer1_ISR_done
+	; If so, 1 second has passed.  Set a flag so the main program knows,
+	; and increment the seconds counter
 	setb seconds_flag ; Let the main program know a second had passed
 	inc Count_state
+
 	mov a, Count1s+0
 	clr c
-	addc a, #1
+	add a, #1 ; This will set the carry bit if it overflows
 	mov Count1s+0, a
 	mov a, Count1s+1
-
+	addc a, #0 ; add the carry to the upper byte of the counter
+	mov Count1s+1, a
 	; cpl P1.5 ; For debugging
-	; Reset to zero the 10-milli-seconds counter, it is a 8-bit variable
-	mov Count10ms, #0
 
 Timer1_ISR_done:
 	pop psw

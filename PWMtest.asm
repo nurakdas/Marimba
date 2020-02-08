@@ -32,7 +32,7 @@ org 0x0023
 
 ; In the 8051 we can define direct access variables starting at location 0x30 up to location 0x7F
 dseg at 0x30
-Count10ms:    ds 1 ; Used to determine when half second has passed
+Count1ms:    ds 1 ; Used to determine when half second has passed
 PWM_Duty_Cycle255: ds 1
 PWM_Cycle_Count: ds 1
 
@@ -55,10 +55,18 @@ $NOLIST
 $include(timers.inc)
 $LIST
 
+Double_Clk:
+  mov dptr, #CLKCON
+  movx a, @dptr
+  orl a, #00001000B ; double the clock speed to 14.746MHz
+  movx @dptr,a
+  ret
+
 ; main =========================================================================
 main:
 	; Initialization
     mov SP, #0x7F
+    lcall Double_Clk
     lcall Timer0_Init
     lcall Timer1_Init
     ; Configure all the ports in bidirectional mode:
@@ -72,17 +80,17 @@ main:
     mov P3M2, #00H
     setb EA   ; Enable Global interrupts
 
-    setb half_seconds_flag
+    clr half_seconds_flag
     clr a
     mov PWM_Duty_Cycle255, #0
 
 	; After initialization the program stays in this 'forever' loop
 loop:
-	jnb half_seconds_flag, loop
+	jnb seconds_flag, loop
 loop_b:
     clr half_seconds_flag ; We clear this flag in the main loop, but it is set in the ISR for timer 1
     mov a, PWM_Duty_Cycle255
-    add a, #5
+    add a, #15
     mov PWM_Duty_Cycle255, a
     ljmp loop
 END
