@@ -8,7 +8,7 @@ cseg
 ;---------------------------------;
 Wait40uSec:
 	push AR0
-	mov R0, #74
+	mov R0, #148
 L0:
 	djnz R0, L0 ; 2 cycles->2*271.26ns*74=40us
 	pop AR0

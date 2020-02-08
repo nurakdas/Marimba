@@ -398,7 +398,7 @@ FSM_ERROR:
     Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
     sjmp $
-    
+
 FSM_HOLD_TEMP_AT_SOAK_JUMP_TO:
 	ljmp FSM_HOLD_TEMP_AT_SOAK
 
