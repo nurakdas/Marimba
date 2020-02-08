@@ -6,6 +6,8 @@ $NOLIST
 $MOD9351
 $LIST
 
+XTAL equ 14746000
+
 ; Reset vector
 org 0x0000
     ljmp main
@@ -33,23 +35,19 @@ org 0x0023
 ; In the 8051 we can define direct access variables starting at location 0x30 up to location 0x7F
 dseg at 0x30
 Count1ms:    ds 1 ; Used to determine when half second has passed
-PWM_Duty_Cycle255: ds 1
-PWM_Cycle_Count: ds 1
+Count1s: ds 1
+Count_state: ds 1
+BFSM1_timer: ds 1
+BFSM2_timer: ds 1
+BFSM3_timer: ds 1
+BFSM4_timer: ds 1
 
 ; In the 8051 we have variables that are 1-bit in size.  We can use the setb, clr, jb, and jnb
 ; instructions with these variables.  This is how you define a 1-bit variable:
 bseg
-half_seconds_flag: dbit 1 ; Set to one in the ISR every time 500 ms had passed
+seconds_flag: dbit 1 ; Set to one in the ISR every time 500 ms had passed
 
 cseg
-; These 'equ' must match the wiring between the microcontroller and the LCD!
-LCD_RS equ P0.7
-LCD_RW equ P3.0
-LCD_E  equ P3.1
-LCD_D4 equ P2.0
-LCD_D5 equ P2.1
-LCD_D6 equ P2.2
-LCD_D7 equ P2.3
 
 $NOLIST
 $include(timers.inc)
@@ -80,7 +78,7 @@ main:
     mov P3M2, #00H
     setb EA   ; Enable Global interrupts
 
-    clr half_seconds_flag
+    clr seconds_flag
     clr a
     mov PWM_Duty_Cycle255, #0
 
@@ -88,7 +86,7 @@ main:
 loop:
 	jnb seconds_flag, loop
 loop_b:
-    clr half_seconds_flag ; We clear this flag in the main loop, but it is set in the ISR for timer 1
+    clr seconds_flag ; We clear this flag in the main loop, but it is set in the ISR for timer 1
     mov a, PWM_Duty_Cycle255
     add a, #15
     mov PWM_Duty_Cycle255, a

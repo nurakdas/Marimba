@@ -19,7 +19,7 @@ TIMER0_RELOAD EQU ((65536-(XTAL/(2*TIMER0_RATE))))
 TIMER1_RATE   EQU 1000 ; 1000Hz, for a timer interrupt every 1ms
 TIMER1_RELOAD EQU ((65536-(XTAL/(2*TIMER1_RATE))))
 
-PWM_OUTPUT EQU P1.7
+PWM_OUTPUT EQU P0.0
 
 dseg
 PWM_Duty_Cycle255: ds 1
@@ -48,7 +48,7 @@ Timer0_ISR:
 	mov TL0, #low(TIMER0_RELOAD)
 	push acc
 	push psw
-    ; cpl P1.4 ; for debugging
+    ; cpl P0.1 ; for debugging
     mov a, PWM_Duty_Cycle255
     jnz TTCheck_Full_Cycle
     clr PWM_OUTPUT
@@ -97,7 +97,7 @@ Timer1_Init:
 Timer1_ISR:
 	mov TH1, #high(TIMER1_RELOAD)
 	mov TL1, #low(TIMER1_RELOAD)
-	; cpl P1.6 ; To check the interrupt rate with oscilloscope. It must be precisely a 10 ms pulse.
+	; cpl P0.2 ; To check the interrupt rate with oscilloscope. It must be precisely a 10 ms pulse.
 
 	; The two registers used in the ISR must be saved in the stack
 	push acc
@@ -120,8 +120,10 @@ Timer1_ISR:
 	; Check if the extension_counter has reached 4
 	mov a, extension_counter
 	cjne a, #4, Timer1_ISR_done
+	mov extension_counter, #0
 	; If so, 1 second has passed.  Set a flag so the main program knows,
 	; and increment the seconds counter
+	; cpl P0.3 ; for debugging
 	setb seconds_flag ; Let the main program know a second had passed
 	inc Count_state
 
