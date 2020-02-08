@@ -1,7 +1,7 @@
 cseg
 
-; When using a 7.373MHz clock
-; one cycle takes 2.0/7.373MHz = 271.26 ns
+; When using a 14746000Hz clock
+; one cycle takes 2.0/7.373MHz = 135.63 ns
 
 ;---------------------------------;
 ; Wait 40 microseconds            ;
@@ -10,7 +10,7 @@ Wait40uSec:
 	push AR0
 	mov R0, #148
 L0:
-	djnz R0, L0 ; 2 cycles->2*271.26ns*74=40us
+	djnz R0, L0 ; 2 cycles->2*135.63ns*148=40us
 	pop AR0
     ret
 
@@ -27,10 +27,10 @@ endmac
 ?Wait_Milli_Seconds:
 	push AR0
 	push AR1
-L3: mov R1, #10
+L3: mov R1, #40 ; CHANGED THIS FROM 10 TO 20 DUE TO THE SPEAKER
 L2: mov R0, #184
-L1: djnz R0, L1 ; 2 cycles->2*271.26ns*184=100us
-    djnz R1, L2 ; 100us*10=1ms
+L1: djnz R0, L1 ; 2 cycles->2*135.63ns*184=50us
+    djnz R1, L2 ; 50us*40=2ms ; DOUBLED BECAUSE OF THE SPEAKER
     djnz R2, L3 ; number of millisecons to wait passed in R2
     pop AR1
     pop AR0

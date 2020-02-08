@@ -3,18 +3,18 @@
 ; You can't nest macros
 
 ; Display strings ==============================================================
-;                           1234567890123456
-set_soak_display1:      db 'Set Soak:       ', 0
-set_reflow_display1:    db 'Set Reflow:     ', 0
-set_display2:           db 'xxx s at xxx ', 0xDF, 'C ', 0 ; 0xDF is degree symbol code
+; ADDED THIS PART TO MAIN: IN FSM.ASM                 1234567890123456
+;set_soak_display1:      db 'Set Soak:       ', 0
+;set_reflow_display1:    db 'Set Reflow:     ', 0
+;set_display2:           db 'xxx s at xxx ', 0xDF, 'C ', 0 ; 0xDF is degree symbol code
 
-display_mode_standby:   db 'Standby   xxx ', 0xDF, 'C', 0
-display_mode_ramp1:     db 'Ramp 1    xxx ', 0xDF, 'C', 0
-display_mode_soak:      db 'Soak      xxx ', 0xDF, 'C', 0
-display_mode_ramp2:     db 'Ramp 2    xxx ', 0xDF, 'C', 0
-display_mode_reflow:    db 'Reflow    xxx ', 0xDF, 'C', 0
-display_mode_cooldown:  db 'Cooldown  xxx ', 0xDF, 'C', 0
-display_mode_error:     db 'ERROR     xxx ', 0xDF, 'C', 0
+;display_mode_standby:   db 'Standby   xxx ', 0xDF, 'C', 0
+;display_mode_ramp1:     db 'Ramp 1    xxx ', 0xDF, 'C', 0
+;display_mode_soak:      db 'Soak      xxx ', 0xDF, 'C', 0
+;display_mode_ramp2:     db 'Ramp 2    xxx ', 0xDF, 'C', 0
+;display_mode_reflow:    db 'Reflow    xxx ', 0xDF, 'C', 0
+;display_mode_cooldown:  db 'Cooldown  xxx ', 0xDF, 'C', 0
+;display_mode_error:     db 'ERROR     xxx ', 0xDF, 'C', 0
 
 ; Main Screen ==================================================================
 ; Display_main_screen_mode(mode_string)
