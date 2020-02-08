@@ -27,10 +27,10 @@ LCD_D5 equ P1.3
 LCD_D6 equ P1.4
 LCD_D7 equ P1.6
 ; Button ADC channels
-B1_ADC equ 1
-B2_ADC equ 2
-B3_ADC equ 3
-B4_ADC equ 4
+B1_ADC equ P1.7 ;1
+B2_ADC equ P0.0 ;2
+B3_ADC equ P2.1 ;3
+B4_ADC equ P2.0 ;4
 ; soundinit.inc buttons
 FLASH_CE    EQU P1.0
 SOUND       EQU P1.1
@@ -294,7 +294,6 @@ read_button_done:
     Button_FSM(BFSM3_state, BFSM3_timer, Button3_raw, B3_flag_bit)
     Button_FSM(BFSM4_state, BFSM4_timer, Button4_raw, B4_flag_bit)
     ret
-
 ; MAIN =========================================================================
 main:
 	; Initialization of hardware
@@ -332,6 +331,17 @@ main:
     Load_X(0)
     Load_y(0)
 
+    set_soak_display1:      db 'Set Soak:       ', 0
+    set_reflow_display1:    db 'Set Reflow:     ', 0
+    set_display2:           db 'xxx s at xxx ', 0xDF, 'C ', 0 ; 0xDF is degree symbol code
+
+    display_mode_standby:   db 'Standby   xxx ', 0xDF, 'C', 0
+    display_mode_ramp1:     db 'Ramp 1    xxx ', 0xDF, 'C', 0
+    display_mode_soak:      db 'Soak      xxx ', 0xDF, 'C', 0
+    display_mode_ramp2:     db 'Ramp 2    xxx ', 0xDF, 'C', 0
+    display_mode_reflow:    db 'Reflow    xxx ', 0xDF, 'C', 0
+    display_mode_cooldown:  db 'Cooldown  xxx ', 0xDF, 'C', 0
+    display_mode_error:     db 'ERROR     xxx ', 0xDF, 'C', 0
 
 	; After initialization the program stays in this 'forever' loop
 loop:
@@ -398,7 +408,7 @@ FSM_ERROR:
     Send_Constant_String(#set_display2)
     ; End Display_init_main_screen
     sjmp $
-    
+
 FSM_HOLD_TEMP_AT_SOAK_JUMP_TO:
 	ljmp FSM_HOLD_TEMP_AT_SOAK
 
@@ -430,7 +440,7 @@ FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 s
     Read_MCP3008(0)
     lcall Calculate_Temp
     lcall Display_update_main_screen
-    mov PWM_Duty_Cycle255, #127
+    mov PWM_Duty_Cycle255, #51
     mov a, Count_state
     cjne a, #80, FSM_HOLD_TEMP_AT_SOAK
 	  inc FSM_state_decider
@@ -446,7 +456,7 @@ FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 s
 FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
     mov a, FSM_state_decider
-	cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW
+	  cjne a, #3, FSM_HOLD_TEMP_AT_REFLOW
     Read_MCP3008(0)
     lcall Calculate_Temp
     lcall Display_update_main_screen
@@ -455,7 +465,7 @@ FSM_RAMP_TO_REFLOW:
     load_y(230)
     lcall x_gteq_y
     jnb mf, FSM_HOLD_TEMP_AT_REFLOW
-	inc FSM_state_decider
+	  inc FSM_state_decider
     clr a
     mov Count_state, a
     ; Display_init_main_screen
@@ -468,11 +478,14 @@ FSM_RAMP_TO_REFLOW:
 FSM_HOLD_TEMP_AT_REFLOW:
 	; KEEP THE TEMP ;
     mov a, FSM_state_decider
-	cjne a, #4, FSM_COOLDOWN
+	  cjne a, #4, FSM_COOLDOWN
     Read_MCP3008(0)
     lcall Calculate_Temp
     lcall Display_update_main_screen
-	inc FSM_state_decider
+    mov PWM_Duty_Cycle255, #51
+    mov a, Count_state
+    cjne a, #40, FSM_HOLD_TEMP_AT_REFLOW
+	  inc FSM_state_decider
     ; Display_init_main_screen
     Set_Cursor(1,1)
     Send_Constant_String(#display_mode_cooldown) ; Display the mode (and temp placeholder)
