@@ -111,7 +111,7 @@ $include(math32.inc)
 $include(timers.inc)
 $include(button_ops.inc)
 $include(soundinit.inc)
-$include(LCD_ops_OLD.inc)
+$include(LCD_ops.inc)
 $LIST
 
 ; The 8-bit hex number passed in the accumulator is converted to
