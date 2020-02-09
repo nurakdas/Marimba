@@ -158,11 +158,14 @@ Get_Temp:
     Load_y(273)
     lcall sub32
     ; Cold-junction temp is now in x
-    mov a, THERMOCOUPLE_ADC_REGISTER
-    ; Thermocouple temp is now in a
-    add a, x+0 ; Add cold junction temp to thermocouple temp to get actual temp
-    mov current_temp, a
-    ; actual thermocouple temp is now in current_temp
+    clr a
+    mov y+1, a
+    mov y+2, a
+    mov y+3, a
+    mov y+0, THERMOCOUPLE_ADC_REGISTER
+    ; Thermocouple temp is now in y
+    lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
+    mov current_temp, x ; actual thermocouple temp is now in current_temp
     ret
 
 ; SPI ==========================================================================
@@ -374,6 +377,7 @@ RAMP_TO_SOAK_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
+    clr B7_flag_bit ; I looooooove ice cream!
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
     ; Check cancel button
@@ -422,6 +426,7 @@ HOLD_TEMP_AT_SOAK_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
+    clr B7_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
     ; Check cancel button
@@ -455,6 +460,7 @@ RAMP_TO_REFLOW_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
+    clr B7_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
     ; Check for cancel button
@@ -481,12 +487,12 @@ FSM_HOLD_TEMP_AT_REFLOW:
     ljmp FSM_COOLDOWN
 HOLD_TEMP_AT_REFLOW_continue1:
     lcall Check_Buttons
-    clr B7_flag_bit
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
+    clr B7_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
     ; Check cancel button
