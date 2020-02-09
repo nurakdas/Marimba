@@ -12,8 +12,17 @@ display_mode_reflow:    db 'Reflow    xxx ', 0xDF, 'C', 0
 display_mode_cooldown:  db 'Cooldown  xxx ', 0xDF, 'C', 0
 display_mode_error:     db 'ERROR     xxx ', 0xDF, 'C', 0
 
+standby_display:        db 'Start or Config ', 0
 ; Main Screen ==================================================================
-; Display_main_screen_mode(mode_string)
+; Display_init_standby_screen()
+Display_init_standby_screen MAC
+    Set_Cursor(1,1)
+    Send_Constant_String(#display_mode_standby) ; Display the mode (and temp placeholder)
+    Set_Cursor(2,1)
+    Send_Constant_String(#standby_display)
+ENDMAC
+
+; Display_init_main_screen(mode_string)
 Display_init_main_screen MAC
     Set_Cursor(1,1)
     Send_Constant_String(#%0) ; Display the mode (and temp placeholder)
@@ -21,8 +30,8 @@ Display_init_main_screen MAC
     Send_Constant_String(#set_display2)
 ENDMAC
 
-; Display_main_screen_temp(temperature_var, state_time_var, total_time_var)
-Display_update_main_screen MAC
+; Display_update_temperature(temperature_var)
+Display_update_temperature MAC
     ; display temperature
     Set_Cursor(1,11)
     mov a, %0
@@ -30,7 +39,11 @@ Display_update_main_screen MAC
     ; BCD is stored in [r1, r0]
     Display_Lower_BCD(ar1)
     Display_BCD(ar0)
+ENDMAC
 
+; Display_main_screen_temp(temperature_var, state_time_var, total_time_var)
+Display_update_main_screen MAC
+    Display_update_temperature(%0)
     ; display state time
     Set_Cursor(2,1)
     mov a, %1

@@ -76,10 +76,17 @@ BFSM1_state: ds 1
 BFSM2_state: ds 1
 BFSM3_state: ds 1
 BFSM4_state: ds 1
+BFSM5_state: ds 1
+BFSM6_state: ds 1
+BFSM7_state: ds 1
+
 BFSM1_timer: ds 1
 BFSM2_timer: ds 1
 BFSM3_timer: ds 1
 BFSM4_timer: ds 1
+BFSM5_timer: ds 1
+BFSM6_timer: ds 1
+BFSM7_timer: ds 1
 
 ; 32 bit Math variables:
 x:	ds 4
@@ -94,6 +101,9 @@ Button1_raw: dbit 1
 Button2_raw: dbit 1
 Button3_raw: dbit 1
 Button4_raw: dbit 1
+Button5_raw: dbit 1
+Button6_raw: dbit 1
+Button7_raw: dbit 1
 ; For each pushbutton we have a flag.  The corresponding FSM will set this
 ; flags to one when a valid press of the pushbutton is detected.
 ; THIS WILL BE CHANGED ACCORDING TO OUR OWN KEYS ;
@@ -101,6 +111,9 @@ B1_flag_bit: dbit 1
 B2_flag_bit: dbit 1
 B3_flag_bit: dbit 1
 B4_flag_bit: dbit 1
+B5_flag_bit: dbit 1
+B6_flag_bit: dbit 1
+B7_flag_bit: dbit 1
 mf:	dbit 1
 
 ; ==============================================================================
@@ -131,13 +144,14 @@ Hex_to_bcd_8bit:
 
 ; Returns temperature at thermocouple in register a
 Get_Temp:
+    ;mov current_temp, LM335_ADC_REGISTER
     ; First get cold junction temp from LM335
     mov x+0, LM335_ADC_REGISTER
     clr a
     mov x+1, a
     mov x+2, a
     mov x+3, a
-    Load_y(333)
+    Load_y(330)
     lcall mul32
     Load_y(255)
     lcall div32
@@ -197,26 +211,90 @@ getchar:
 	ret
 
 ; BUTTONS ======================================================================
-Check_Buttons:
+Check_Buttons: ; Checks to see if we pressed any buttons
     ; TODO: implement reading buttons from a resistor chain on the ADC
-
+    lcall ADC_to_PB
 read_button_done:
     Button_FSM(BFSM1_state, BFSM1_timer, Button1_raw, B1_flag_bit)
     Button_FSM(BFSM2_state, BFSM2_timer, Button2_raw, B2_flag_bit)
     Button_FSM(BFSM3_state, BFSM3_timer, Button3_raw, B3_flag_bit)
     Button_FSM(BFSM4_state, BFSM4_timer, Button4_raw, B4_flag_bit)
+    Button_FSM(BFSM5_state, BFSM5_timer, Button5_raw, B5_flag_bit)
+    Button_FSM(BFSM6_state, BFSM6_timer, Button6_raw, B6_flag_bit)
+    Button_FSM(BFSM7_state, BFSM7_timer, Button7_raw, B7_flag_bit)
     ret
+;------------------------------ADDED BY DENIZ-------------------------------
+ADC_to_PB:
+	setb Button7_raw
+	setb Button6_raw
+	setb Button5_raw
+	setb Button4_raw
+	setb Button3_raw
+	setb Button2_raw
+	setb Button1_raw
+	; Check PB7
+	clr c
+	mov a, AD0DAT3
+	subb a, #(216-10) ; 3.2V=247*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L6
+	clr Button7_raw
+ADC_to_PB_L6:
+	; Check PB5
+	clr c
+	mov a, AD0DAT3
+	subb a, #(185-10) ; 2.4V=185*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L5
+	clr Button6_raw
+ADC_to_PB_L5:
+	; Check PB4
+	clr c
+	mov a, AD0DAT3
+	subb a, #(154-10) ; 2.0V=154*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L4
+	clr Button5_raw
+ADC_to_PB_L4:
+	; Check PB3
+	clr c
+	mov a, AD0DAT3
+	subb a, #(123-10) ; 1.6V=123*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L3
+	clr Button4_raw
+ADC_to_PB_L3:
+	; Check PB2
+	clr c
+	mov a, AD0DAT3
+	subb a, #(92-10) ; 1.2V=92*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L2
+	clr Button3_raw
+ADC_to_PB_L2:
+	; Check PB1
+	clr c
+	mov a, AD0DAT3
+	subb a, #(61-10) ; 0.8V=61*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L1
+	clr Button2_raw
+ADC_to_PB_L1:
+	; Check PB1
+	clr c
+	mov a, AD0DAT3
+	subb a, #(30-10) ; 0.4V=30*(3.3/255); the -10 is to prevent false readings
+	jc ADC_to_PB_L0
+	clr Button1_raw
+ADC_to_PB_L0:
+	; No pusbutton pressed
+	ret
+;------------------------------END OF ADDED BY DENIZ----------------------------
 
-; MAIN =========================================================================
-main:
+; MAIN==========================================================================
+main: ; MY COCK IS MUCH BIGGER THAN YOURS
 	; Initialization of hardware
     mov SP, #0x7F
     lcall Ports_Init ; Default all pins as bidirectional I/O. See Table 42.
     lcall LCD_4BIT
     lcall Double_Clk
 	;lcall InitSerialPort ; For sound
-	lcall InitADC0 ; Call after 'Ports_Init'
-	lcall InitDAC1 ; Call after 'Ports_Init'
+	  lcall InitADC0 ; Call after 'Ports_Init'
+	  lcall InitDAC1 ; Call after 'Ports_Init'
 	;lcall CCU_Inits ; for sound
 	;lcall Init_SPI ; for sound
     lcall Timer0_Init
@@ -243,36 +321,40 @@ main:
     mov BFSM2_timer, a
     mov BFSM3_timer, a
     mov BFSM4_timer,a
+    mov current_temp, a
     Load_X(0)
     Load_y(0)
 
 	; After initialization the program stays in this 'forever' loop
-loop:
     mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
-	mov a, FSM_state_decider
-    Display_init_main_screen(display_mode_standby)
+    Display_init_standby_screen()
+loop:
+
 FSM_RESET:
     mov a, FSM_state_decider
-    cjne a, #0, FSM_RAMP_TO_SOAK
+    ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
+    clr c
+    subb a, #0
+	jz RESET_continue1
+    ljmp FSM_RAMP_TO_SOAK
+RESET_continue1:
     clr a
     mov Count1s, a
     mov Count1s+1, a
     mov Count_state, a
+    mov PWM_Duty_Cycle255, a
     lcall Check_Buttons
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
-
-    ; Update temperature reading
-    Set_Cursor(1,11)
-    mov a, x
-    lcall Hex_to_bcd_8bit
-    ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(ar1)
-    Display_BCD(ar0)
-    ; done updating temperature reading
-    jnb B1_flag_bit, FSM_RESET
+    clr B5_flag_bit
+    clr B6_flag_bit
+    clr B7_flag_bit
+    lcall Get_Temp
+    Display_update_temperature(current_temp)
+    ; Check start/cancel button and start if pressed
+    jnb B1_flag_bit, FSM_RAMP_TO_SOAK
 	inc FSM_state_decider
     clr B1_flag_bit
     Display_init_main_screen(display_mode_ramp1)
@@ -282,32 +364,42 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     mov a, FSM_state_decider
     clr c
     subb a, #1
-	jz RAMP_TO_SOAK_continue1
+    jz RAMP_TO_SOAK_continue1
     ljmp FSM_HOLD_TEMP_AT_SOAK
 RAMP_TO_SOAK_continue1:
-	mov PWM_Duty_Cycle255, #255
+    mov PWM_Duty_Cycle255, #255
+    lcall Check_Buttons
+    clr B2_flag_bit
+    clr B3_flag_bit
+    clr B4_flag_bit
+    clr B5_flag_bit
+    clr B6_flag_bit
     lcall Get_Temp
-    Display_update_main_screen(current_temp, #0, #0)
+    Display_update_main_screen(current_temp, Count_state, Count1s)
+    ; Check cancel button
+    jb B1_flag_bit, RAMP_TO_SOAK_continue2
+    ljmp FSM_COOLDOWN
+RAMP_TO_SOAK_continue2:
     clr a
     mov a, Count_state
-    cjne a, #60, RAMP_TO_SOAK_continue2
+    cjne a, #60, RAMP_TO_SOAK_continue3
     load_y(50)
     lcall x_lt_y
-    jnb mf, RAMP_TO_SOAK_continue2
+    jnb mf, RAMP_TO_SOAK_continue3
 
 FSM_ERROR:
     mov PWM_Duty_Cycle255, #0
     Display_init_main_screen(display_mode_error)
     sjmp $
 
-RAMP_TO_SOAK_continue2:
+RAMP_TO_SOAK_continue3:
     clr a
     load_y(150)
     lcall x_gteq_y
     ; jnb mf, FSM_RAMP_TO_SOAK ; the jump is too long for this
-    jb mf, RAMP_TO_SOAK_continue3
+    jb mf, RAMP_TO_SOAK_continue4
     ljmp FSM_RAMP_TO_SOAK
-RAMP_TO_SOAK_continue3:
+RAMP_TO_SOAK_continue4:
     inc FSM_state_decider
     clr a
     mov Count_state, a
@@ -324,12 +416,26 @@ FSM_HOLD_TEMP_AT_SOAK: ; this state is where we acheck if it reaches 50C in 60 s
     jz HOLD_TEMP_AT_SOAK_continue1
     ljmp FSM_RAMP_TO_REFLOW
 HOLD_TEMP_AT_SOAK_continue1:
+    lcall Check_Buttons
+    clr B2_flag_bit
+    clr B3_flag_bit
+    clr B4_flag_bit
+    clr B5_flag_bit
+    clr B6_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
+    ; Check cancel button
+    jb B1_flag_bit, HOLD_TEMP_AT_SOAK_continue2
+    ljmp FSM_COOLDOWN
+HOLD_TEMP_AT_SOAK_continue2:
     mov PWM_Duty_Cycle255, #51
     mov a, Count_state
-    cjne a, #80, FSM_HOLD_TEMP_AT_SOAK
-	  inc FSM_state_decider
+    clr c
+    subb a, #80
+    jz HOLD_TEMP_AT_SOAK_continue3
+    ljmp FSM_RAMP_TO_REFLOW
+HOLD_TEMP_AT_SOAK_continue3:
+	inc FSM_state_decider
     clr a
     mov Count_state, a
     Display_init_main_screen(display_mode_ramp2)
@@ -343,8 +449,18 @@ FSM_RAMP_TO_REFLOW:
     jz RAMP_TO_REFLOW_continue1
     ljmp FSM_HOLD_TEMP_AT_REFLOW
 RAMP_TO_REFLOW_continue1:
+    lcall Check_Buttons
+    clr B2_flag_bit
+    clr B3_flag_bit
+    clr B4_flag_bit
+    clr B5_flag_bit
+    clr B6_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
+    ; Check for cancel button
+    jb B1_flag_bit, RAMP_TO_REFLOW_continue2
+    ljmp FSM_COOLDOWN
+RAMP_TO_REFLOW_continue2:
     mov PWM_Duty_Cycle255, #255
     clr a
     load_y(230)
@@ -364,11 +480,25 @@ FSM_HOLD_TEMP_AT_REFLOW:
     jz HOLD_TEMP_AT_REFLOW_continue1
     ljmp FSM_COOLDOWN
 HOLD_TEMP_AT_REFLOW_continue1:
+    lcall Check_Buttons
+    clr B7_flag_bit
+    clr B2_flag_bit
+    clr B3_flag_bit
+    clr B4_flag_bit
+    clr B5_flag_bit
+    clr B6_flag_bit
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
+    ; Check cancel button
+    jnb B1_flag_bit, FSM_COOLDOWN
     mov PWM_Duty_Cycle255, #51
+    ; Wait for 40s to pass before going to next state (TODO: should be a parameter)
     mov a, Count_state
-    cjne a, #40, FSM_HOLD_TEMP_AT_REFLOW
+    clr c
+    subb a, #40
+    jz HOLD_TEMP_AT_REFLOW_continue2
+    ljmp FSM_COOLDOWN
+HOLD_TEMP_AT_REFLOW_continue2:
     inc FSM_state_decider
     Display_init_main_screen(display_mode_cooldown)
 
@@ -376,17 +506,30 @@ HOLD_TEMP_AT_REFLOW_continue1:
 FSM_COOLDOWN:
 	; SHUT;
     mov a, FSM_state_decider
-    cjne a, #5, FSM_DONE
+    ; cjne a, #5, FSM_DONE
+    clr c
+    subb a, #5
+    jz COOLDOWN_continue1
+    ljmp FSM_DONE
+COOLDOWN_continue1:
     lcall Get_Temp
     Display_update_main_screen(current_temp, Count_state, Count1s)
     mov PWM_Duty_Cycle255, #0
     load_y(30)
     lcall x_lteq_y
-    jnb mf, FSM_COOLDOWN
+    jb mf, COOLDOWN_continue2
+    ljmp FSM_DONE
+COOLDOWN_continue2:
     clr a
     mov Count_state, a
-
+    Display_init_standby_screen()
 FSM_DONE:
 	ljmp loop
 
 END
+
+; JAMES 1:12
+; BEATUS VIR QVI SVFFERT TENTATIONEM
+; QVIA CVM
+; PROBATVS FVERIT ACCIPIET
+; CORONAM VITAE

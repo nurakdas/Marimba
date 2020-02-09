@@ -117,6 +117,9 @@ Timer1_ISR:
 	inc BFSM2_timer
 	inc BFSM3_timer
 	inc BFSM4_timer
+	inc BFSM5_timer
+	inc BFSM6_timer
+	inc BFSM7_timer
 
 	mov a, internal_1ms_counter
 	cjne a, #250, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
