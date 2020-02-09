@@ -1,3 +1,6 @@
+; Authors: Andrew Hanlon, Nursultan Tugolbaev, Deniz Tabakci
+; Purpose: The main .asm code of our reflow oven controller
+
 $NOLIST
 $MOD9351
 $LIST
@@ -226,7 +229,7 @@ read_button_done:
     Button_FSM(BFSM6_state, BFSM6_timer, Button6_raw, B6_flag_bit)
     Button_FSM(BFSM7_state, BFSM7_timer, Button7_raw, B7_flag_bit)
     ret
-;------------------------------ADDED BY DENIZ-------------------------------
+;------------------------------ADDED BY PLATEMAN-------------------------------
 ADC_to_PB:
 	setb Button7_raw
 	setb Button6_raw
@@ -293,7 +296,7 @@ ADC_to_PB_L1:
 ADC_to_PB_L0:
 	; No pusbutton pressed
 	ret
-;------------------------------END OF ADDED BY DENIZ----------------------------
+;------------------------------END OF ADDED BY PLATEMAN----------------------------
 
 ; MAIN==========================================================================
 main: ; MY COCK IS MUCH BIGGER THAN YOURS
@@ -568,6 +571,6 @@ END
 
 ; JAMES 1:12
 ; BEATUS VIR QVI SVFFERT TENTATIONEM
-; QVIA CVM
+; QVIANIQM CVM
 ; PROBATVS FVERIT ACCIPIET
 ; CORONAM VITAE
