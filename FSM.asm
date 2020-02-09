@@ -397,7 +397,8 @@ RAMP_TO_SOAK_continue1:
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display2:
     ; Check cancel button
-    jb B1_flag_bit, RAMP_TO_SOAK_continue2
+    jnb B1_flag_bit, RAMP_TO_SOAK_continue2
+    clr B1_flag_bit
     ljmp FSM_COOLDOWN
 RAMP_TO_SOAK_continue2:
     clr a
@@ -455,7 +456,9 @@ HOLD_TEMP_AT_SOAK_continue1:
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display3:
     ; Check cancel button
-    jb B1_flag_bit, HOLD_TEMP_AT_SOAK_continue2
+    jnb B1_flag_bit, HOLD_TEMP_AT_SOAK_continue2
+    clr B1_flag_bit
+    mov FSM_state_decider, #5
     ljmp FSM_COOLDOWN
 HOLD_TEMP_AT_SOAK_continue2:
     mov PWM_Duty_Cycle255, #51
@@ -492,7 +495,9 @@ RAMP_TO_REFLOW_continue1:
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display4:
     ; Check for cancel button
-    jb B1_flag_bit, RAMP_TO_REFLOW_continue2
+    jnb B1_flag_bit, RAMP_TO_REFLOW_continue2
+    clr B1_flag_bit
+    mov FSM_state_decider, #5
     ljmp FSM_COOLDOWN
 RAMP_TO_REFLOW_continue2:
     mov PWM_Duty_Cycle255, #255
@@ -527,18 +532,20 @@ HOLD_TEMP_AT_REFLOW_continue1:
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display5:
     ; Check cancel button
-    jnb B1_flag_bit, FSM_COOLDOWN
+    jnb B1_flag_bit, HOLD_TEMP_AT_REFLOW_continue2
+    clr B1_flag_bit
+    mov FSM_state_decider, #5
+    ljmp FSM_COOLDOWN
+HOLD_TEMP_AT_REFLOW_continue2:
     mov PWM_Duty_Cycle255, #51
     ; Wait for 40s to pass before going to next state (TODO: should be a parameter)
     mov a, Count_state
     clr c
     subb a, #40
-    jz HOLD_TEMP_AT_REFLOW_continue2
+    jz HOLD_TEMP_AT_REFLOW_continue3
     ljmp FSM_COOLDOWN
-HOLD_TEMP_AT_REFLOW_continue2:
+HOLD_TEMP_AT_REFLOW_continue3:
     inc FSM_state_decider
-    Display_init_main_screen(display_mode_cooldown)
-
 
 FSM_COOLDOWN:
 	; SHUT;
@@ -549,6 +556,7 @@ FSM_COOLDOWN:
     jz COOLDOWN_continue1
     ljmp FSM_DONE
 COOLDOWN_continue1:
+    Display_init_main_screen(display_mode_cooldown)
     lcall Get_Temp
     jnb seconds_flag, skip_display6
     clr seconds_flag
