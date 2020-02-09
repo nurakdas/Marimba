@@ -25,7 +25,7 @@ LCD_D7 equ P1.6
 ; Button ADC channels
 THERMOCOUPLE_ADC_REGISTER equ AD0DAT1 ; on P0.0
 LM335_ADC_REGISTER equ AD0DAT0 ; on pin P1.7
-BUTTONS_ADC_REGISTER equ AD0DAT3 ; on pin P2.0
+BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
 FLASH_CE    EQU P1.0
@@ -237,52 +237,59 @@ ADC_to_PB:
 	setb Button1_raw
 	; Check PB7
 	clr c
-	mov a, AD0DAT3
-	subb a, #(216-10) ; 3.2V=247*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(247-10) ; 3.2V=247*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L6
 	clr Button7_raw
+    ret
 ADC_to_PB_L6:
 	; Check PB5
 	clr c
-	mov a, AD0DAT3
-	subb a, #(185-10) ; 2.4V=185*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(212-10) ; 2.4V=185*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L5
 	clr Button6_raw
+    ret
 ADC_to_PB_L5:
 	; Check PB4
 	clr c
-	mov a, AD0DAT3
-	subb a, #(154-10) ; 2.0V=154*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(176-10) ; 2.0V=154*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L4
 	clr Button5_raw
+    ret
 ADC_to_PB_L4:
 	; Check PB3
 	clr c
-	mov a, AD0DAT3
-	subb a, #(123-10) ; 1.6V=123*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(141-10) ; 1.6V=123*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L3
 	clr Button4_raw
+    ret
 ADC_to_PB_L3:
 	; Check PB2
 	clr c
-	mov a, AD0DAT3
-	subb a, #(92-10) ; 1.2V=92*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(106-10) ; 1.2V=92*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L2
 	clr Button3_raw
+    ret
 ADC_to_PB_L2:
 	; Check PB1
 	clr c
-	mov a, AD0DAT3
-	subb a, #(61-10) ; 0.8V=61*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(70-10) ; 0.8V=61*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L1
 	clr Button2_raw
+    ret
 ADC_to_PB_L1:
 	; Check PB1
 	clr c
-	mov a, AD0DAT3
-	subb a, #(30-10) ; 0.4V=30*(3.3/255); the -10 is to prevent false readings
+	mov a, BUTTONS_ADC_REGISTER
+	subb a, #(36-10) ; 0.4V=30*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L0
 	clr Button1_raw
+    ret
 ADC_to_PB_L0:
 	; No pusbutton pressed
 	ret
@@ -331,7 +338,7 @@ main: ; MY COCK IS MUCH BIGGER THAN YOURS
 	; After initialization the program stays in this 'forever' loop
     mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
-    Display_init_standby_screen()
+    lcall Display_init_standby_screen
 loop:
 
 FSM_RESET:
@@ -355,7 +362,10 @@ RESET_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     lcall Get_Temp
+    jnb seconds_flag, skip_display1
+    clr seconds_flag
     Display_update_temperature(current_temp)
+skip_display1:
     ; Check start/cancel button and start if pressed
     jnb B1_flag_bit, FSM_RAMP_TO_SOAK
 	inc FSM_state_decider
@@ -379,7 +389,10 @@ RAMP_TO_SOAK_continue1:
     clr B6_flag_bit
     clr B7_flag_bit ; I looooooove ice cream!
     lcall Get_Temp
+    jnb seconds_flag, skip_display2
+    clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
+skip_display2:
     ; Check cancel button
     jb B1_flag_bit, RAMP_TO_SOAK_continue2
     ljmp FSM_COOLDOWN
@@ -394,7 +407,13 @@ RAMP_TO_SOAK_continue2:
 FSM_ERROR:
     mov PWM_Duty_Cycle255, #0
     Display_init_main_screen(display_mode_error)
-    sjmp $
+    lcall Display_clear_line2
+FSM_ERROR_loop:
+    jnb seconds_flag, skip_display_ERROR
+    clr seconds_flag
+    Display_update_temperature(current_temp)
+skip_display_ERROR:
+    sjmp FSM_ERROR_loop
 
 RAMP_TO_SOAK_continue3:
     clr a
@@ -428,7 +447,10 @@ HOLD_TEMP_AT_SOAK_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     lcall Get_Temp
+    jnb seconds_flag, skip_display3
+    clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
+skip_display3:
     ; Check cancel button
     jb B1_flag_bit, HOLD_TEMP_AT_SOAK_continue2
     ljmp FSM_COOLDOWN
@@ -462,7 +484,10 @@ RAMP_TO_REFLOW_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     lcall Get_Temp
+    jnb seconds_flag, skip_display4
+    clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
+skip_display4:
     ; Check for cancel button
     jb B1_flag_bit, RAMP_TO_REFLOW_continue2
     ljmp FSM_COOLDOWN
@@ -494,7 +519,10 @@ HOLD_TEMP_AT_REFLOW_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     lcall Get_Temp
+    jnb seconds_flag, skip_display5
+    clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
+skip_display5:
     ; Check cancel button
     jnb B1_flag_bit, FSM_COOLDOWN
     mov PWM_Duty_Cycle255, #51
@@ -519,7 +547,10 @@ FSM_COOLDOWN:
     ljmp FSM_DONE
 COOLDOWN_continue1:
     lcall Get_Temp
+    jnb seconds_flag, skip_display6
+    clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
+skip_display6:
     mov PWM_Duty_Cycle255, #0
     load_y(30)
     lcall x_lteq_y
@@ -528,7 +559,8 @@ COOLDOWN_continue1:
 COOLDOWN_continue2:
     clr a
     mov Count_state, a
-    Display_init_standby_screen()
+    lcall Display_init_standby_screen
+    lcall Display_clear_line2
 FSM_DONE:
 	ljmp loop
 
