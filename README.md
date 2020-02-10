@@ -4,6 +4,8 @@ Deniz Tabakçı = Sea Plater
 
 To do:
 
-- Finish FSM compilation errors
-- Figure out the storage issue with the circuit
-- Connect the circuit to the SSD relay box
+- Turn the timer to min:sec
+- Make the parameters programmable
+- Incorporate sound into FSM
+- Test and configure PWM
+- Add extra functions (LEDs, different languages/sounds, etc.)
