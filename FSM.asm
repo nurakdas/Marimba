@@ -1,5 +1,7 @@
 ; Authors: Andrew Hanlon, Nursultan Tugolbaev, Deniz Tabakci
 ; Purpose: The main .asm code of our reflow oven controller
+; This code was blessed by Allah (cc)
+; Copyrights reserved. c 2020, Group Marimba
 
 $NOLIST
 $MOD9351
@@ -339,17 +341,22 @@ main: ; MY COCK IS MUCH BIGGER THAN YOURS
     Load_y(0)
 
 	; After initialization the program stays in this 'forever' loop
-    mov FSM_state_decider, #0
+    ;mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
     lcall Display_init_standby_screen
-loop:
 
+loop:
+    ; start of the state machine
+    lcall Display_init_standby_screen
+    mov FSM_state_decider, #0
+    clr B1_flag_bit
+    ;Display_update_temperature(current_temp)
 FSM_RESET:
     mov a, FSM_state_decider
     ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
     clr c
     subb a, #0
-	jz RESET_continue1
+	  jz RESET_continue1
     ljmp FSM_RAMP_TO_SOAK
 RESET_continue1:
     clr a
@@ -370,8 +377,8 @@ RESET_continue1:
     Display_update_temperature(current_temp)
 skip_display1:
     ; Check start/cancel button and start if pressed
-    jnb B1_flag_bit, FSM_RAMP_TO_SOAK
-	inc FSM_state_decider
+    jnb B1_flag_bit, RESET_Continue1
+	  inc FSM_state_decider
     clr B1_flag_bit
     Display_init_main_screen(display_mode_ramp1)
 
@@ -398,7 +405,7 @@ RAMP_TO_SOAK_continue1:
 skip_display2:
     ; Check cancel button
     jnb B1_flag_bit, RAMP_TO_SOAK_continue2
-    clr B1_flag_bit
+;    clr B1_flag_bit
     ljmp FSM_COOLDOWN
 RAMP_TO_SOAK_continue2:
     clr a
@@ -457,7 +464,7 @@ HOLD_TEMP_AT_SOAK_continue1:
 skip_display3:
     ; Check cancel button
     jnb B1_flag_bit, HOLD_TEMP_AT_SOAK_continue2
-    clr B1_flag_bit
+  ;  clr B1_flag_bit
     mov FSM_state_decider, #5
     ljmp FSM_COOLDOWN
 HOLD_TEMP_AT_SOAK_continue2:
@@ -496,7 +503,7 @@ RAMP_TO_REFLOW_continue1:
 skip_display4:
     ; Check for cancel button
     jnb B1_flag_bit, RAMP_TO_REFLOW_continue2
-    clr B1_flag_bit
+  ;  clr B1_flag_bit
     mov FSM_state_decider, #5
     ljmp FSM_COOLDOWN
 RAMP_TO_REFLOW_continue2:
@@ -533,7 +540,7 @@ HOLD_TEMP_AT_REFLOW_continue1:
 skip_display5:
     ; Check cancel button
     jnb B1_flag_bit, HOLD_TEMP_AT_REFLOW_continue2
-    clr B1_flag_bit
+  ;  clr B1_flag_bit
     mov FSM_state_decider, #5
     ljmp FSM_COOLDOWN
 HOLD_TEMP_AT_REFLOW_continue2:
@@ -553,8 +560,13 @@ FSM_COOLDOWN:
     ; cjne a, #5, FSM_DONE
     clr c
     subb a, #5
-    jz COOLDOWN_continue1
+    jz COOLDOWN_continue0
     ljmp FSM_DONE
+
+COOLDOWN_continue0:
+    jnb B1_flag_bit, COOLDOWN_continue1
+    clr B1_flag_bit
+    mov FSM_state_decider, #5
 COOLDOWN_continue1:
     Display_init_main_screen(display_mode_cooldown)
     lcall Get_Temp
@@ -563,15 +575,16 @@ COOLDOWN_continue1:
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display6:
     mov PWM_Duty_Cycle255, #0
-    load_y(30)
+    load_y(50)
     lcall x_lteq_y
     jb mf, COOLDOWN_continue2
-    ljmp FSM_DONE
+    ljmp COOLDOWN_continue1
 COOLDOWN_continue2:
     clr a
     mov Count_state, a
     lcall Display_init_standby_screen
     lcall Display_clear_line2
+    mov FSM_state_decider, #0
 FSM_DONE:
 	ljmp loop
 
