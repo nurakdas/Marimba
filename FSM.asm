@@ -356,9 +356,9 @@ main:
 
 loop:
     ; start of the state machine
+    clr SOUND
     lcall Check_Buttons
     lcall Get_Temp
-
 FSM_RESET:
     mov a, FSM_state_decider
     ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
