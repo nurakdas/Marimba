@@ -1,6 +1,6 @@
+; buttonTest.asm
 ; Authors: Andrew Hanlon, Nursultan Tugolbaev, Deniz Tabakci
-; Purpose: The main .asm code of our reflow oven controller
-; This code was blessed by Allah (cc)
+; Purpose: Test buttons and their macro-generated state machines
 ; Copyrights reserved. c 2020, Group Marimba
 
 $NOLIST
