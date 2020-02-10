@@ -36,6 +36,18 @@ BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 FLASH_CE    EQU P1.0
 SOUND       EQU P1.1
 
+; State numbers
+STATE_RESET EQU 0
+STATE_RAMP_TO_SOAK EQU 1
+STATE_SOAK EQU 2
+STATE_RAMP_TO_REFLOW EQU 3
+STATE_REFLOW EQU 4
+STATE_COOLDOWN EQU 5
+STATE_SET_SOAK EQU 6
+STATE_SET_SOAK EQU 7
+
+TEMP_OVERSHOOT EQU 10 ; degrees - used to avoid overshoot in temp
+
 ; VECTOR TABLE =================================================================
 ; Reset vector
 org 0x0000
@@ -326,9 +338,10 @@ main:
     clr B7_flag_bit
     clr a
     mov Count1ms, a
-    mov Count1s+0, a
-    mov Count1s+1, a
-    mov Count_state, a
+    mov minutes_state, a
+    mov seconds_state, a
+    mov minutes_total, a
+    mov seconds_total, a
     mov FSM_state_decider, a
     mov BFSM1_state, a
     mov BFSM2_state, a
@@ -363,7 +376,7 @@ FSM_RESET:
     mov a, FSM_state_decider
     ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
     clr c
-    subb a, #0
+    subb a, #STATE_RESET
 	jz RESET_continue1
     ljmp FSM_RAMP_TO_SOAK ; jump to next state check if state decider doesn't match
 RESET_continue1:
@@ -385,9 +398,11 @@ skip_display1:
     clr B1_flag_bit
 	inc FSM_state_decider
     ; Reset state and total stopwatches
-    mov Count1s, a
-    mov Count1s+1, a
-    mov Count_state, a
+    clr a
+    mov seconds_state, a
+    mov minutes_state, a
+    mov seconds_total, a
+    mov minutes_total, a
     setb seconds_flag
     Display_init_main_screen(display_mode_ramp1)
 
@@ -395,7 +410,7 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     ; cjne a, #1, FSM_SOAK ; jump is too long for this
     mov a, FSM_state_decider
     clr c
-    subb a, #1
+    subb a, #STATE_RAMP_TO_SOAK
     jz RAMP_TO_SOAK_continue1
     ljmp FSM_SOAK ; go to check for next state
 RAMP_TO_SOAK_continue1:
@@ -409,35 +424,40 @@ RAMP_TO_SOAK_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display2
     clr seconds_flag
-    Display_update_main_screen(current_temp, Count_state, Count1s)
+    Display_update_main_screen()
 skip_display2:
     ; Check cancel button
     jnb B1_flag_bit, RAMP_TO_SOAK_continue2
     clr B1_flag_bit
-    mov FSM_state_decider, #5
+    mov FSM_state_decider, #STATE_COOLDOWN
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_SOAK
 RAMP_TO_SOAK_continue2:
-    ; Check if 60 seconds have passed without an increase in temp
-    mov a, Count_state
-    cjne a, #60, RAMP_TO_SOAK_continue3
+    ; Check if 60 seconds have passed without an increase in temp (>50 deg).
+    ; If so, there's a problem!
+    mov a, minutes_state
+    cjne a, #1, RAMP_TO_SOAK_continue3
     load_y(50)
     lcall x_lt_y
     jnb mf, RAMP_TO_SOAK_continue3
-    ljmp FSM_ERROR ; if so, there's a problem!
+    ljmp FSM_ERROR
     ; Otherwise continue...
 RAMP_TO_SOAK_continue3:
-    ; Check if temp is over 150 degress. If so, go to SOAK state
-    clr a
-    load_y(150) ; TODO: change to parameter rather than a hard coded value
-    ; TODO: Also may have to account for overshoot
+    ; Check if temp is over soak_temp - TEMP_OVERSHOOT degrees.
+    ; If so, go to SOAK state
+    mov a, soak_temp
+    clr c
+    subb a, #TEMP_OVERSHOOT
+    load_y(acc)
     lcall x_gteq_y
     jb mf, RAMP_TO_SOAK_continue4
     ljmp FSM_SOAK
 RAMP_TO_SOAK_continue4:
     inc FSM_state_decider
-    mov Count_state, #0 ; reset state stopwatch
+    clr a
+    mov seconds_state, a
+    mov minutes_state, a
     setb seconds_flag
     Display_init_main_screen(display_mode_soak) ; reinitialize display
 
@@ -446,7 +466,7 @@ FSM_SOAK: ; this state is where we check if it reaches 50C in 60 seconds
     mov a, FSM_state_decider
 	; cjne a, #2, FSM_RAMP_TO_REFLOW ; jump is too long for this
     clr c
-    subb a, #2
+    subb a, #STATE_SOAK
     jz SOAK_continue1
     ljmp FSM_RAMP_TO_REFLOW ; go to next state check
 SOAK_continue1:
@@ -460,19 +480,19 @@ SOAK_continue1:
     ; Update temp display every second
     jnb seconds_flag, skip_display3
     clr seconds_flag
-    Display_update_main_screen(current_temp, Count_state, Count1s)
+    Display_update_main_screen()
 skip_display3:
     ; Check cancel button
     jnb B1_flag_bit, SOAK_continue2
     clr B1_flag_bit
-    mov FSM_state_decider, #5 ; go to Cooldown
+    mov FSM_state_decider, #STATE_COOLDOWN
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_RAMP_TO_REFLOW ; go to next state check
 SOAK_continue2:
     ; Check if soak time has elapsed
     mov PWM_Duty_Cycle255, #51
-    mov a, Count_state
+    mov a, seconds_state ; TODO: use minutes
     clr c
     subb a, #80 ; TODO: use actual parameter
     jz SOAK_continue3
@@ -480,7 +500,9 @@ SOAK_continue2:
 SOAK_continue3:
     ; Go to next state if so
 	inc FSM_state_decider
-    mov Count_state, #0
+    clr a
+    mov seconds_state, a
+    mov minutes_state, a
     setb seconds_flag
     Display_init_main_screen(display_mode_ramp2)
 
@@ -488,7 +510,7 @@ FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
     mov a, FSM_state_decider
     clr c
-    subb a, #3
+    subb a, #STATE_RAMP_TO_REFLOW
     jz RAMP_TO_REFLOW_continue1
     ljmp FSM_REFLOW ; go to next state check
 RAMP_TO_REFLOW_continue1:
@@ -501,12 +523,12 @@ RAMP_TO_REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display4
     clr seconds_flag
-    Display_update_main_screen(current_temp, Count_state, Count1s)
+    Display_update_main_screen()
 skip_display4:
     ; Check for cancel button
     jnb B1_flag_bit, RAMP_TO_REFLOW_continue2
     clr B1_flag_bit
-    mov FSM_state_decider, #5
+    mov FSM_state_decider, #STATE_COOLDOWN
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_REFLOW
@@ -517,7 +539,10 @@ RAMP_TO_REFLOW_continue2:
     lcall x_gteq_y
     jnb mf, FSM_REFLOW
 	inc FSM_state_decider
-    mov Count_state, #0 ; Reset state stopwatch
+    ; Reset state stopwatch
+    clr a
+    mov seconds_state, a
+    mov minutes_state, a
     setb seconds_flag
     Display_init_main_screen(display_mode_reflow)
 
@@ -525,7 +550,7 @@ FSM_REFLOW:
 	; KEEP THE TEMP ;
     mov a, FSM_state_decider
     clr c
-    subb a, #4
+    subb a, #STATE_REFLOW
     jz REFLOW_continue1
     ljmp FSM_COOLDOWN
 REFLOW_continue1:
@@ -538,19 +563,19 @@ REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display5
     clr seconds_flag
-    Display_update_main_screen(current_temp, Count_state, Count1s)
+    Display_update_main_screen()
 skip_display5:
     ; Check cancel button
     jnb B1_flag_bit, REFLOW_continue2
     clr B1_flag_bit
-    mov FSM_state_decider, #5
+    mov FSM_state_decider, #STATE_COOLDOWN
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_COOLDOWN
 REFLOW_continue2:
     mov PWM_Duty_Cycle255, #51 ; Hold temp steady
     ; Wait for 40s to pass before going to next state (TODO: should be a parameter)
-    mov a, Count_state
+    mov a, Count_state ; TODO: use seconds and minutes
     clr c
     subb a, #40
     jnz FSM_COOLDOWN
@@ -563,7 +588,7 @@ FSM_COOLDOWN:
 	; SHUT;
     mov a, FSM_state_decider
     clr c
-    subb a, #5
+    subb a, #STATE_COOLDOWN
     jz COOLDOWN_continue1
     ljmp FSM_DONE
 COOLDOWN_continue1:
@@ -584,7 +609,7 @@ skip_display6:
     load_y(50)
     lcall x_lteq_y
     jnb mf, FSM_DONE
-    mov FSM_state_decider, #0
+    mov FSM_state_decider, #STATE_RESET
     setb seconds_flag
     lcall Display_init_standby_screen
     ljmp FSM_DONE

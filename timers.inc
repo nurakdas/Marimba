@@ -3,12 +3,9 @@
 ; Author: Andrew Hanlon
 ;
 ; Initializations and ISR's for timer 0 and timer 1
-; Timer 0 is used to generate a pwm signal
-; Timer 1 provides timekeeping for program by providing a tick every 10ms
+; Timer 0 is used to generate a Pulse Width Modulation (PWM) signal
+; Timer 1 provides timekeeping for the program.
 
-; ENSURE THAT THE FOLLOWING LINES ARE INCLUDED IN DSEG
-; PWM_Duty_Cycle255: ds 1
-; PWM_Cycle_Count: ds 1
 ; To set the duty cycle of the PWM, change the value of PWM_Duty_Cycle255
 ; 0 is 0% (always off), 127 is 50%, 255 is 100% (full beans)
 
@@ -24,9 +21,12 @@ PWM_OUTPUT EQU P0.1
 dseg
 ; variables program should access
 ; Timing Variables
+; All variables are regular numbers. These are NOT BCD variables.
 Count1ms: ds 1
-Count1s: ds 2 ; 2 byte value
-Count_state: ds 1
+seconds_total: ds 1
+minutes_total: ds 1
+seconds_state: ds 1
+minutes_state: ds 1
 PWM_Duty_Cycle255: ds 1
 ; variables program should not access
 PWM_Cycle_Count: ds 1
@@ -34,6 +34,22 @@ internal_1ms_counter: ds 1
 extension_counter: ds 1
 
 cseg
+; Increment_time(seconds, minutes)
+Increment_time MAC
+	clr c
+	mov a, %0 ; seconds
+	inc a
+	cjne a, #60, done_seconds
+	; clear seconds and increment minute if 60 seconds reached
+	mov %0, #0 ; seconds
+	mov a, %1 ; minutes
+	inc a
+	mov %1, a ; minutes
+	ret
+done_seconds:
+	mov %0, a ; seconds
+ENDMAC
+
 
 Timer0_Init:
 	mov a, TMOD
@@ -136,13 +152,8 @@ Timer1_ISR:
 	setb seconds_flag ; Let the main program know a second had passed
 	inc Count_state
 
-	mov a, Count1s+0
-	clr c
-	add a, #1 ; This will set the carry bit if it overflows
-	mov Count1s+0, a
-	mov a, Count1s+1
-	addc a, #0 ; add the carry to the upper byte of the counter
-	mov Count1s+1, a
+	Increment_time(seconds_state, minutes_state)
+	Increment_time(seconds_total, minutes_total)
 	; cpl P1.5 ; For debugging
 
 Timer1_ISR_done:
