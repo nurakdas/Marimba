@@ -153,6 +153,54 @@ Hex_to_bcd_8bit:
 	mov R0, a
 	ret
 
+  Send_Lower_BCD mac
+  	push ar0
+  	mov r0, %0
+  	lcall ?Send_Lower_BCD
+  	pop ar0
+  endmac
+
+  ?Send_Lower_BCD:
+  	push acc
+  	; write only the least significant digit
+  	mov a, r0
+  	anl a, #0fh
+  	orl a, #30h
+  	lcall putchar
+  	pop acc
+  	ret
+
+  Send_Upper_BCD mac
+  	push ar0
+  	mov r0, %0
+  	lcall ?Send_Upper_BCD
+  	pop ar0
+  endmac
+
+  ?Send_Upper_BCD:
+  	push acc
+  	; write only the most significant digit
+  	mov a, r0
+  	anl a, #0f0h
+  	swap a
+  	orl a, #30h
+  	lcall putchar
+  	pop acc
+  	ret
+
+Send_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_BCD
+	pop ar0
+endmac
+
+?Send_BCD:
+	lcall ?Send_Upper_BCD
+	; write least significant digit
+	lcall ?Send_Lower_BCD
+	ret
+
 ; Returns temperature at thermocouple in register a
 Get_Temp:
     ;mov current_temp, LM335_ADC_REGISTER
@@ -175,14 +223,20 @@ Get_Temp:
     mov y+3, a
     mov y+0, THERMOCOUPLE_ADC_REGISTER
     ; Thermocouple temp is now in y
+    ;jnb seconds_flag, get_temp_done
     lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
     mov current_temp, x ; actual thermocouple temp is now in current_temp
-    lcall hex2bcd
-  	Send_BCD(bcd)
-  	mov a, #'\r'
-  	lcall putchar
-  	mov a, #'\n'
-  	lcall putchar
+    ret
+
+send_putty:
+    mov a, current_temp
+    lcall Hex_to_bcd_8bit
+    Send_Lower_BCD(ar1)
+    Send_BCD(ar0)
+    mov a, #'\r'
+    lcall putchar
+    mov a, #'\n'
+    lcall putchar
     ret
 
 ; SPI ==========================================================================
@@ -223,64 +277,15 @@ InitSerialPort:
 	ret
 ; Andrew's serial string and BCD functions
 ; Send a constant-zero-terminated string using the serial port
-SendString:
-    clr A
-    movc A, @A+DPTR
-    jz SendStringDone
-    lcall putchar
-    inc DPTR
-    sjmp SendString
-SendStringDone:
-    ret
-
-Send_BCD mac
-	push ar0
-	mov r0, %0
-	lcall ?Send_BCD
-	pop ar0
-endmac
-
-?Send_BCD:
-	; Write most significant digit
-	lcall ?Send_Upper_BCD
-	; write least significant digit
-	lcall ?Send_Lower_BCD
-	ret
-
-Send_Lower_BCD mac
-	push ar0
-	mov r0, %0
-	lcall ?Send_Lower_BCD
-	pop ar0
-endmac
-
-?Send_Lower_BCD:
-	push acc
-	; write only the least significant digit
-	mov a, r0
-	anl a, #0fh
-	orl a, #30h
-	lcall putchar
-	pop acc
-	ret
-
-Send_Upper_BCD mac
-	push ar0
-	mov r0, %0
-	lcall ?Send_Upper_BCD
-	pop ar0
-endmac
-
-?Send_Upper_BCD:
-	push acc
-	; write only the most significant digit
-	mov a, r0
-	anl a, #0f0h
-	swap a
-	orl a, #30h
-	lcall putchar
-	pop acc
-	ret
+; SendString:
+;     clr A
+;     movc A, @A+DPTR
+;     jz SendStringDone
+;     lcall putchar
+;     inc DPTR
+;     sjmp SendString
+; SendStringDone:
+;     ret
 
 ; Send a character using the serial port
 ;JESUS'S NEW CODE IMPLEMENTS PUTCHAR AND GETCHAR DIFFERENTLY;
@@ -460,6 +465,7 @@ RESET_continue1:
     ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display1:
     ; Check start/cancel button and start if pressed
@@ -491,6 +497,7 @@ RAMP_TO_SOAK_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display2 ;
     clr seconds_flag
+    lcall send_putty
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display2:
     ; Check cancel button
@@ -542,6 +549,7 @@ SOAK_continue1:
     ; Update temp display every second
     jnb seconds_flag, skip_display3
     clr seconds_flag
+    lcall send_putty
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display3:
     ; Check cancel button
@@ -583,6 +591,7 @@ RAMP_TO_REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display4
     clr seconds_flag
+    lcall send_putty
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display4:
     ; Check for cancel button
@@ -620,6 +629,7 @@ REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display5
     clr seconds_flag
+    lcall send_putty
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display5:
     ; Check cancel button
@@ -659,6 +669,7 @@ COOLDOWN_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display6
     clr seconds_flag
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display6:
     mov PWM_Duty_Cycle255, #0 ; Shut off oven
@@ -685,6 +696,7 @@ FSM_ERROR_loop:
     jnb seconds_flag, skip_display_ERROR
     clr seconds_flag
     lcall Get_Temp
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display_ERROR:
     sjmp FSM_ERROR_loop
