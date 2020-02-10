@@ -300,8 +300,8 @@ ADC_to_PB_L0:
 	ret
 ;------------------------------END OF ADDED BY PLATEMAN----------------------------
 
-; MAIN==========================================================================
-main: ; MY COCK IS MUCH BIGGER THAN YOURS
+; MAIN =========================================================================
+main:
 	; Initialization of hardware
     mov SP, #0x7F
     lcall Ports_Init ; Default all pins as bidirectional I/O. See Table 42.
@@ -344,10 +344,10 @@ main: ; MY COCK IS MUCH BIGGER THAN YOURS
     ;mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
     lcall Display_init_standby_screen
+    setb seconds_flag
 
 loop:
     ; start of the state machine
-    lcall Display_init_standby_screen
     mov FSM_state_decider, #0
     clr B1_flag_bit
     ;Display_update_temperature(current_temp)
@@ -356,13 +356,10 @@ FSM_RESET:
     ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
     clr c
     subb a, #0
-	  jz RESET_continue1
+	jz RESET_continue1
     ljmp FSM_RAMP_TO_SOAK
 RESET_continue1:
     clr a
-    mov Count1s, a
-    mov Count1s+1, a
-    mov Count_state, a
     mov PWM_Duty_Cycle255, a
     lcall Check_Buttons
     clr B2_flag_bit
@@ -372,14 +369,18 @@ RESET_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     lcall Get_Temp
+    ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
     Display_update_temperature(current_temp)
 skip_display1:
     ; Check start/cancel button and start if pressed
     jnb B1_flag_bit, RESET_Continue1
+    ; clr B1_flag_bit
 	  inc FSM_state_decider
-    clr B1_flag_bit
+    mov Count1s, a
+    mov Count1s+1, a
+    mov Count_state, a
     Display_init_main_screen(display_mode_ramp1)
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
@@ -397,7 +398,7 @@ RAMP_TO_SOAK_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
-    clr B7_flag_bit ; I looooooove ice cream!
+    clr B7_flag_bit
     lcall Get_Temp
     jnb seconds_flag, skip_display2
     clr seconds_flag
