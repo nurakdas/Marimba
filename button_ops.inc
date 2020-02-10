@@ -30,19 +30,19 @@
 Decrement_time_setting MAC
 	clr c
 	mov a, %0 ; seconds
-	jnz decrement_time_seconds
+	jnz decrement_time_seconds%M
 	mov a, %1 ; minutes
-	jz decrement_time_rollover
+	jz decrement_time_rollover%M
 	; Seconds are zero, minutes are non-zero, so decrement minutes and rollover seconds
 	dec %1
 	mov %0, #59
 	sjmp Decrement_time_setting_done%M
-decrement_time_rollover:
+decrement_time_rollover%M:
 	; Seconds and minutes are zero, so rollover to 9:59
 	mov %1, #9
 	mov %0, #59
 	sjmp Decrement_time_setting_done%M
-decrement_time_seconds:
+decrement_time_seconds%M:
 	; Seconds are non-zero, so just decrement seconds
 	dec %0
 Decrement_time_setting_done%M:
@@ -219,7 +219,10 @@ FSM%M_state1:
 	cjne a, #1, FSM%M_state2
 	; this is the debounce state
 	mov a, %1
-	cjne a, #50, FSM%M_done ; 50 ms passed?
+	clr c
+	subb a, #50
+	jc FSM%M_done ; 50 ms passed?
+	;cjne a, #50, FSM%M_done ; 50 ms passed?
 	inc %0
 	sjmp FSM%M_done
 FSM%M_state2:

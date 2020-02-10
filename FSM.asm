@@ -255,7 +255,7 @@ ADC_to_PB:
 	; Check PB7
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(216-10) ; 3.2V=245*(3.3/255); the -10 is to prevent false readings
+	subb a, #(245-10) ; 3.2V=245*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L6
 	clr Button7_raw
     ret
@@ -263,7 +263,7 @@ ADC_to_PB_L6:
 	; Check PB5
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(185-10) ; 2.4V=210*(3.3/255); the -10 is to prevent false readings
+	subb a, #(210-10) ; 2.4V=210*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L5
 	clr Button6_raw
     ret
@@ -271,7 +271,7 @@ ADC_to_PB_L5:
 	; Check PB4
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(154-10) ; 2.0V=175*(3.3/255); the -10 is to prevent false readings
+	subb a, #(175-10) ; 2.0V=175*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L4
 	clr Button5_raw
     ret
@@ -279,7 +279,7 @@ ADC_to_PB_L4:
 	; Check PB3
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(123-10) ; 1.6V=140*(3.3/255); the -10 is to prevent false readings
+	subb a, #(140-10) ; 1.6V=140*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L3
 	clr Button4_raw
     ret
@@ -287,7 +287,7 @@ ADC_to_PB_L3:
 	; Check PB2
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(92-10) ; 1.2V=105*(3.3/255); the -10 is to prevent false readings
+	subb a, #(105-10) ; 1.2V=105*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L2
 	clr Button3_raw
     ret
@@ -295,7 +295,7 @@ ADC_to_PB_L2:
 	; Check PB1
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(61-10) ; 0.8V=70*(3.3/255); the -10 is to prevent false readings
+	subb a, #(70-10) ; 0.8V=70*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L1
 	clr Button2_raw
     ret
@@ -303,7 +303,7 @@ ADC_to_PB_L1:
 	; Check PB1
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(30-10) ; 0.458V=36*(3.3/255); the -10 is to prevent false readings
+	subb a, #(36-10) ; 0.458V=36*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L0
 	clr Button1_raw
     ret
@@ -347,10 +347,16 @@ main:
     mov BFSM2_state, a
     mov BFSM3_state, a
     mov BFSM4_state, a
+    mov BFSM5_state, a
+    mov BFSM6_state, a
+    mov BFSM7_state, a
     mov BFSM1_timer, a
     mov BFSM2_timer, a
     mov BFSM3_timer, a
-    mov BFSM4_timer,a
+    mov BFSM4_timer, a
+    mov BFSM5_timer, a
+    mov BFSM6_timer, a
+    mov BFSM7_timer, a
     mov current_temp, a
     Load_X(0)
     Load_y(0)
@@ -387,7 +393,7 @@ RESET_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
-    clr B1_flag_bit;;;;
+    clr B7_flag_bit
     ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
@@ -401,8 +407,8 @@ skip_display1:
     ljmp FSM_RAMP_TO_SOAK
 RESET_check_start_button:
     ; Check start/cancel button and start if pressed
-    jnb B7_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state;;;;;;;;;;;;;
-    clr B7_flag_bit;;;;;;;;;;;;;;;
+    jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
+    clr B1_flag_bit
 	inc FSM_state_decider
     ; Reset state and total stopwatches
     clr a
@@ -602,7 +608,6 @@ REFLOW_continue2:
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
 
-
 FSM_COOLDOWN:
     mov a, FSM_state_decider
     clr c
@@ -706,9 +711,30 @@ SET_REFLOW_continue2:
     ljmp FSM_DONE
 SET_REFLOW_continue3:
     ; Check button 3 and decrement time if pressed
+    jnb B3_flag_bit, SET_REFLOW_continue4
+    clr B3_flag_bit
+    Decrement_time_setting(reflow_time_seconds, reflow_time_minutes)
+    ljmp SET_REFLOW_continue7
+SET_REFLOW_continue4:
     ; Check button 4 and increment time if pressed
+    jnb B4_flag_bit, SET_REFLOW_continue5
+    clr B4_flag_bit
+    Increment_time_setting(reflow_time_seconds, reflow_time_minutes)
+    ljmp SET_REFLOW_continue7
+SET_REFLOW_continue5:
     ; Check button 5 and decrement temp if pressed
+    jnb B5_flag_bit, SET_REFLOW_continue6
+    clr B5_flag_bit
+    dec reflow_temp
+    ljmp SET_REFLOW_continue7
+SET_REFLOW_continue6:
     ; Check button 6 and increment temp if pressed
+    jnb B6_flag_bit, SET_REFLOW_continue7
+    clr B6_flag_bit
+    inc reflow_temp
+    ljmp SET_REFLOW_continue7
+SET_REFLOW_continue7:
+    Display_update_set_screen(reflow_time_seconds, reflow_time_minutes, reflow_temp)
 
 FSM_DONE:
 	ljmp loop
