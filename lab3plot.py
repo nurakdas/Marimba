@@ -6,6 +6,11 @@ import sys, time, math
 import serial
 import serial.tools.list_ports
 
+<<<<<<< HEAD
+=======
+xsize=100
+
+>>>>>>> 213ea1e7e3c4ee44e6c770fc51a6cdae39b828ac
 try:
     ser.close() # try to close the last opened port
 except:
@@ -59,11 +64,19 @@ fig = plt.figure()
 fig.canvas.mpl_connect('close_event', on_close_figure)
 ax = fig.add_subplot(111)
 line, = ax.plot([], [], lw=2, label='Temperature curve')
+<<<<<<< HEAD
 ax.set_ylim(0, 250)
 ax.set_xlim(0, 120)
 ax.grid()
 ax.legend()
 plt.title('Reflow Oven Tempereature by Group Marimba c. All Rights Reserved.')
+=======
+ax.set_ylim(-10, 70)
+ax.set_xlim(0, xsize)
+ax.grid()
+ax.legend()
+plt.title('LM335 Temperature Plot')
+>>>>>>> 213ea1e7e3c4ee44e6c770fc51a6cdae39b828ac
 plt.xlabel('Time (Seconds)')
 plt.ylabel('Temperature (Celsius)')
 
