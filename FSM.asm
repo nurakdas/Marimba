@@ -3,6 +3,12 @@
 ; This code was blessed by Allah (cc)
 ; Copyrights reserved. c 2020, Group Marimba
 
+; Free Pins we have:
+; 0.2
+; 0.3
+; 3.1
+; 2.6
+
 $NOLIST
 $MOD9351
 $LIST
@@ -171,6 +177,12 @@ Get_Temp:
     ; Thermocouple temp is now in y
     lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
     mov current_temp, x ; actual thermocouple temp is now in current_temp
+    lcall hex2bcd
+  	Send_BCD(bcd)
+  	mov a, #'\r'
+  	lcall putchar
+  	mov a, #'\n'
+  	lcall putchar
     ret
 
 ; SPI ==========================================================================
@@ -194,6 +206,13 @@ Init_SPI:
 ; SERIAL =======================================================================
 ; Configure the serial port and baud rate
 InitSerialPort:
+  ; Since the reset button bounces, we need to wait a bit before
+  ; sending messages, otherwise we risk displaying gibberish!
+  mov R1, #222
+  mov R0, #11
+  djnz R0, $   ; 3 cycles->3*678.15ns*11=22.51519us
+  djnz R1, $-4 ; 22.51519us*222=4.998ms
+  ; Now we can proceed with the configuration
 	mov	BRGCON,#0x00
 	mov	BRGR1,#high(BRVAL)
 	mov	BRGR0,#low(BRVAL)
@@ -201,6 +220,66 @@ InitSerialPort:
 	mov	SCON,#0x52 ; Serial port in mode 1, ren, txrdy, rxempty
 	mov	P1M1,#0x00 ; Enable pins RxD and TXD
 	mov	P1M2,#0x00 ; Enable pins RxD and TXD
+	ret
+; Andrew's serial string and BCD functions
+; Send a constant-zero-terminated string using the serial port
+SendString:
+    clr A
+    movc A, @A+DPTR
+    jz SendStringDone
+    lcall putchar
+    inc DPTR
+    sjmp SendString
+SendStringDone:
+    ret
+
+Send_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_BCD
+	pop ar0
+endmac
+
+?Send_BCD:
+	; Write most significant digit
+	lcall ?Send_Upper_BCD
+	; write least significant digit
+	lcall ?Send_Lower_BCD
+	ret
+
+Send_Lower_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_Lower_BCD
+	pop ar0
+endmac
+
+?Send_Lower_BCD:
+	push acc
+	; write only the least significant digit
+	mov a, r0
+	anl a, #0fh
+	orl a, #30h
+	lcall putchar
+	pop acc
+	ret
+
+Send_Upper_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_Upper_BCD
+	pop ar0
+endmac
+
+?Send_Upper_BCD:
+	push acc
+	; write only the most significant digit
+	mov a, r0
+	anl a, #0f0h
+	swap a
+	orl a, #30h
+	lcall putchar
+	pop acc
 	ret
 
 ; Send a character using the serial port
@@ -302,19 +381,22 @@ ADC_to_PB_L0:
 
 ; MAIN =========================================================================
 main:
-	; Initialization of hardware
+	  ; Initialization of hardware
     mov SP, #0x7F
     lcall Ports_Init ; Default all pins as bidirectional I/O. See Table 42.
     lcall LCD_4BIT
     lcall Double_Clk
-	;lcall InitSerialPort ; For sound
+	  ;lcall InitSerialPort ; For sound
 	  lcall InitADC0 ; Call after 'Ports_Init'
 	  lcall InitDAC1 ; Call after 'Ports_Init'
-	;lcall CCU_Inits ; for sound
-	;lcall Init_SPI ; for sound
+	  ;lcall CCU_Inits ; for sound
+	  ;lcall Init_SPI ; for sound
     lcall Timer0_Init
     lcall Timer1_Init
     setb EA ; Enable Global interrupts
+    ; lcall phython program
+    lcall InitSerialPort ; make the Phython script read it with the SPI
+    lcall SendString ; send the temperature through the SPI
 
     ; Initialize variables
     clr B1_flag_bit
@@ -407,7 +489,7 @@ RAMP_TO_SOAK_continue1:
     clr B6_flag_bit
     clr B7_flag_bit
     ; Update temp every second
-    jnb seconds_flag, skip_display2
+    jnb seconds_flag, skip_display2 ;
     clr seconds_flag
     Display_update_main_screen(current_temp, Count_state, Count1s)
 skip_display2:
