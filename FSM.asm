@@ -34,7 +34,7 @@ BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
 FLASH_CE    EQU P1.0
-SOUND       EQU P1.1
+SOUND       EQU P2.7
 
 ; VECTOR TABLE =================================================================
 ; Reset vector
