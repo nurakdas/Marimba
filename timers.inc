@@ -31,23 +31,25 @@ PWM_Duty_Cycle255: ds 1
 ; variables program should not access
 PWM_Cycle_Count: ds 1
 internal_1ms_counter: ds 1
-extension_counter: ds 1
+extension_counter0: ds 1
+extension_counter1: ds 1
+extension_counter2: ds 1
 
 cseg
 ; Increment_time(seconds, minutes)
 Increment_time MAC
-	clr c
 	mov a, %0 ; seconds
 	inc a
-	cjne a, #60, done_seconds
+	cjne a, #60, done_seconds%M
 	; clear seconds and increment minute if 60 seconds reached
 	mov %0, #0 ; seconds
 	mov a, %1 ; minutes
 	inc a
 	mov %1, a ; minutes
-	ret
-done_seconds:
+	sjmp done_minutes%M
+done_seconds%M:
 	mov %0, a ; seconds
+done_minutes%M:
 ENDMAC
 
 
@@ -107,7 +109,9 @@ Timer1_Init:
 	mov TL1, #low(TIMER1_RELOAD)
 	clr a
 	mov internal_1ms_counter, a
-	mov extension_counter, a
+	mov extension_counter0, a
+	mov extension_counter1, a
+	mov extension_counter2, a
 	; Enable the timer and interrupts
     setb ET1  ; Enable timer 1 interrupt
     setb TR1  ; Start timer 1
@@ -140,21 +144,32 @@ Timer1_ISR:
 	mov a, internal_1ms_counter
 	cjne a, #250, Timer1_ISR_done ; Warning: this instruction changes the carry flag!
 	mov internal_1ms_counter, #0 ; reset the internal 1ms counter
-	inc extension_counter
-	; The extension_counter is incremented every 1/4 of a second
-	; Check if the extension_counter has reached 4
-	mov a, extension_counter
-	cjne a, #4, Timer1_ISR_done
-	mov extension_counter, #0
-	; If so, 1 second has passed.  Set a flag so the main program knows,
-	; and increment the seconds counter
-	; cpl P0.3 ; for debugging
-	setb seconds_flag ; Let the main program know a second had passed
-	inc Count_state
+	inc extension_counter0
+	inc extension_counter1
+	inc extension_counter2
+	; The extension counters are incremented every 1/4 of a second
 
+	; Check if half a second has passed with extension_counter0
+	mov a, extension_counter0
+	cjne a, #2, Timer1_check_four
+	mov extension_counter0, #0
+	setb seconds_flag ; Let the main program know a half-second had passed
+
+Timer1_check_four:
+	; Check if a second has passed with extension_counter1
+	mov a, extension_counter1
+	cjne a, #4, Timer1_check_twenty
+	mov extension_counter1, #0
+	; Increment the seconds counter
 	Increment_time(seconds_state, minutes_state)
 	Increment_time(seconds_total, minutes_total)
-	; cpl P1.5 ; For debugging
+
+Timer1_check_twenty:
+	; Set a flag every 5 seconds for the speech functionality
+	mov a, extension_counter2
+	cjne a, #20, Timer1_ISR_done
+	mov extension_counter2, #0
+	; setb T2S_FSM_start TODO: uncomment once sound stuff is implemented
 
 Timer1_ISR_done:
 	pop psw

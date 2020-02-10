@@ -54,7 +54,7 @@ Display_update_temperature MAC
 ENDMAC
 
 ; Display_main_screen_temp()
-Display_update_main_screen MAC
+Display_update_main_screen:
     Display_update_temperature(current_temp)
     ; display state time
     Set_Cursor(2,1)
@@ -77,7 +77,7 @@ Display_update_main_screen MAC
     mov a, seconds_total
     lcall Hex_to_bcd_8bit
     Display_BCD(ar0)
-ENDMAC
+    ret
 
 ; Set Screen ===================================================================
 Display_init_set_soak_screen MAC
@@ -95,17 +95,20 @@ Display_init_set_reflow_screen MAC
 ENDMAC
 
 ; TODO: UPDATE FOR USE OF MINUTES
-; Display_update_set_screen(time, temp)
+; Display_update_set_screen(time_seconds, time_minutes, temp)
 Display_update_set_screen MAC
     Set_Cursor(2,1)
-    mov a, %0
+    mov a, %1
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
-    Display_Lower_BCD(ar1)
+    Display_Lower_BCD(ar0)
+    Set_Cursor(2,3)
+    mov a, %0
+    lcall Hex_to_bcd_8bit
     Display_BCD(ar0)
 
     Set_Cursor(2, 9)
-    mov a, %1
+    mov a, %2
     lcall Hex_to_bcd_8bit
     ; BCD is stored in [r1, r0]
     Display_Lower_BCD(ar1)

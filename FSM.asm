@@ -44,9 +44,7 @@ STATE_RAMP_TO_REFLOW EQU 3
 STATE_REFLOW EQU 4
 STATE_COOLDOWN EQU 5
 STATE_SET_SOAK EQU 6
-STATE_SET_SOAK EQU 7
-
-TEMP_OVERSHOOT EQU 10 ; degrees - used to avoid overshoot in temp
+STATE_SET_REFLOW EQU 7
 
 ; VECTOR TABLE =================================================================
 ; Reset vector
@@ -82,9 +80,12 @@ w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 current_temp: ds 1
 ; Temperature profile parameters
 soak_temp: ds 1
-soak_time: ds 1
+soak_time_seconds: ds 1
+soak_time_minutes: ds 1
 reflow_temp: ds 1
-reflow_time: ds 1
+reflow_time_seconds: ds 1
+reflow_time_minutes: ds 1
+
 
 FSM_state_decider: ds 1 ; HELPS US SEE WHICH STATE WE ARE IN
 ; Button FSM Variables:
@@ -234,7 +235,6 @@ getchar:
 Check_Buttons: ; Checks to see if we pressed any buttons
     ; TODO: implement reading buttons from a resistor chain on the ADC
     lcall ADC_to_PB
-read_button_done:
     Button_FSM(BFSM1_state, BFSM1_timer, Button1_raw, B1_flag_bit)
     Button_FSM(BFSM2_state, BFSM2_timer, Button2_raw, B2_flag_bit)
     Button_FSM(BFSM3_state, BFSM3_timer, Button3_raw, B3_flag_bit)
@@ -255,7 +255,7 @@ ADC_to_PB:
 	; Check PB7
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(247-10) ; 3.2V=247*(3.3/255); the -10 is to prevent false readings
+	subb a, #(216-10) ; 3.2V=245*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L6
 	clr Button7_raw
     ret
@@ -263,7 +263,7 @@ ADC_to_PB_L6:
 	; Check PB5
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(212-10) ; 2.4V=185*(3.3/255); the -10 is to prevent false readings
+	subb a, #(185-10) ; 2.4V=210*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L5
 	clr Button6_raw
     ret
@@ -271,7 +271,7 @@ ADC_to_PB_L5:
 	; Check PB4
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(176-10) ; 2.0V=154*(3.3/255); the -10 is to prevent false readings
+	subb a, #(154-10) ; 2.0V=175*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L4
 	clr Button5_raw
     ret
@@ -279,7 +279,7 @@ ADC_to_PB_L4:
 	; Check PB3
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(141-10) ; 1.6V=123*(3.3/255); the -10 is to prevent false readings
+	subb a, #(123-10) ; 1.6V=140*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L3
 	clr Button4_raw
     ret
@@ -287,7 +287,7 @@ ADC_to_PB_L3:
 	; Check PB2
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(106-10) ; 1.2V=92*(3.3/255); the -10 is to prevent false readings
+	subb a, #(92-10) ; 1.2V=105*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L2
 	clr Button3_raw
     ret
@@ -295,7 +295,7 @@ ADC_to_PB_L2:
 	; Check PB1
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(70-10) ; 0.8V=61*(3.3/255); the -10 is to prevent false readings
+	subb a, #(61-10) ; 0.8V=70*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L1
 	clr Button2_raw
     ret
@@ -303,7 +303,7 @@ ADC_to_PB_L1:
 	; Check PB1
 	clr c
 	mov a, BUTTONS_ADC_REGISTER
-	subb a, #(36-10) ; 0.4V=30*(3.3/255); the -10 is to prevent false readings
+	subb a, #(30-10) ; 0.458V=36*(3.3/255); the -10 is to prevent false readings
 	jc ADC_to_PB_L0
 	clr Button1_raw
     ret
@@ -357,9 +357,11 @@ main:
 
     ; Default Temperature profile parameters
     mov soak_temp, #80
-    mov soak_time, #60
+    mov soak_time_minutes, #1
+    mov soak_time_seconds, #0
     mov reflow_temp, #230
-    mov reflow_time, #40
+    mov reflow_time_seconds, #40
+    mov reflow_time_minutes, #0
 
 	; After initialization the program stays in this 'forever' loop
     mov FSM_state_decider, #0
@@ -374,7 +376,6 @@ loop:
 
 FSM_RESET:
     mov a, FSM_state_decider
-    ; cjne a, #0, FSM_RAMP_TO_SOAK ; jump is too long for this
     clr c
     subb a, #STATE_RESET
 	jz RESET_continue1
@@ -382,20 +383,26 @@ FSM_RESET:
 RESET_continue1:
     mov PWM_Duty_Cycle255, #0
 
-    clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
-    clr B7_flag_bit
+    clr B1_flag_bit;;;;
     ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
     Display_update_temperature(current_temp)
 skip_display1:
+    ; Check set button (button 2) and change to SET_SOAK state if pressed
+    jnb B2_flag_bit, RESET_check_start_button
+    clr B2_flag_bit
+    mov FSM_state_decider, #STATE_SET_SOAK
+    Display_init_set_soak_screen()
+    ljmp FSM_RAMP_TO_SOAK
+RESET_check_start_button:
     ; Check start/cancel button and start if pressed
-    jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
-    clr B1_flag_bit
+    jnb B7_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state;;;;;;;;;;;;;
+    clr B7_flag_bit;;;;;;;;;;;;;;;
 	inc FSM_state_decider
     ; Reset state and total stopwatches
     clr a
@@ -407,7 +414,6 @@ skip_display1:
     Display_init_main_screen(display_mode_ramp1)
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
-    ; cjne a, #1, FSM_SOAK ; jump is too long for this
     mov a, FSM_state_decider
     clr c
     subb a, #STATE_RAMP_TO_SOAK
@@ -424,7 +430,7 @@ RAMP_TO_SOAK_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display2
     clr seconds_flag
-    Display_update_main_screen()
+    lcall Display_update_main_screen
 skip_display2:
     ; Check cancel button
     jnb B1_flag_bit, RAMP_TO_SOAK_continue2
@@ -438,18 +444,21 @@ RAMP_TO_SOAK_continue2:
     ; If so, there's a problem!
     mov a, minutes_state
     cjne a, #1, RAMP_TO_SOAK_continue3
+    mov a, seconds_state
+    cjne a, #0, RAMP_TO_SOAK_continue3
     load_y(50)
     lcall x_lt_y
     jnb mf, RAMP_TO_SOAK_continue3
     ljmp FSM_ERROR
     ; Otherwise continue...
 RAMP_TO_SOAK_continue3:
-    ; Check if temp is over soak_temp - TEMP_OVERSHOOT degrees.
+    ; Check if temp is over soak_temp degrees.
     ; If so, go to SOAK state
-    mov a, soak_temp
-    clr c
-    subb a, #TEMP_OVERSHOOT
-    load_y(acc)
+    mov y+0, soak_temp
+    clr a
+    mov y+1, a
+    mov y+2, a
+    mov y+3, a
     lcall x_gteq_y
     jb mf, RAMP_TO_SOAK_continue4
     ljmp FSM_SOAK
@@ -461,10 +470,8 @@ RAMP_TO_SOAK_continue4:
     setb seconds_flag
     Display_init_main_screen(display_mode_soak) ; reinitialize display
 
-FSM_SOAK: ; this state is where we check if it reaches 50C in 60 seconds
-	; check if it's 50C or above at 60 seconds
+FSM_SOAK:
     mov a, FSM_state_decider
-	; cjne a, #2, FSM_RAMP_TO_REFLOW ; jump is too long for this
     clr c
     subb a, #STATE_SOAK
     jz SOAK_continue1
@@ -480,7 +487,7 @@ SOAK_continue1:
     ; Update temp display every second
     jnb seconds_flag, skip_display3
     clr seconds_flag
-    Display_update_main_screen()
+    lcall Display_update_main_screen
 skip_display3:
     ; Check cancel button
     jnb B1_flag_bit, SOAK_continue2
@@ -490,11 +497,15 @@ skip_display3:
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_RAMP_TO_REFLOW ; go to next state check
 SOAK_continue2:
-    ; Check if soak time has elapsed
     mov PWM_Duty_Cycle255, #51
-    mov a, seconds_state ; TODO: use minutes
+    ; Check if soak time has elapsed
+    mov a, seconds_state
     clr c
-    subb a, #80 ; TODO: use actual parameter
+    subb a, soak_time_seconds
+    jz SOAK_continue3
+    mov a, minutes_state
+    clr c
+    subb a, soak_time_minutes
     jz SOAK_continue3
     ljmp FSM_RAMP_TO_REFLOW
 SOAK_continue3:
@@ -523,7 +534,7 @@ RAMP_TO_REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display4
     clr seconds_flag
-    Display_update_main_screen()
+    lcall Display_update_main_screen
 skip_display4:
     ; Check for cancel button
     jnb B1_flag_bit, RAMP_TO_REFLOW_continue2
@@ -535,7 +546,11 @@ skip_display4:
 RAMP_TO_REFLOW_continue2:
     mov PWM_Duty_Cycle255, #255 ; Heat the oven up
     ; Check if reflow temperature reached
-    load_y(230) ; TODO: change to an actual parameter (this is the reflow temp-ish)
+    mov y+0, reflow_temp
+    clr a
+    mov y+1, a
+    mov y+2, a
+    mov y+3, a
     lcall x_gteq_y
     jnb mf, FSM_REFLOW
 	inc FSM_state_decider
@@ -563,7 +578,7 @@ REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display5
     clr seconds_flag
-    Display_update_main_screen()
+    lcall Display_update_main_screen
 skip_display5:
     ; Check cancel button
     jnb B1_flag_bit, REFLOW_continue2
@@ -574,10 +589,14 @@ skip_display5:
     ljmp FSM_COOLDOWN
 REFLOW_continue2:
     mov PWM_Duty_Cycle255, #51 ; Hold temp steady
-    ; Wait for 40s to pass before going to next state (TODO: should be a parameter)
-    mov a, Count_state ; TODO: use seconds and minutes
+    ; Wait for reflow time to pass before going to next state
+    mov a, minutes_state
     clr c
-    subb a, #40
+    subb a, reflow_time_minutes
+    jnz FSM_COOLDOWN
+    mov a, seconds_state
+    clr c
+    subb a, reflow_time_seconds
     jnz FSM_COOLDOWN
     inc FSM_state_decider
     setb seconds_flag
@@ -585,12 +604,11 @@ REFLOW_continue2:
 
 
 FSM_COOLDOWN:
-	; SHUT;
     mov a, FSM_state_decider
     clr c
     subb a, #STATE_COOLDOWN
     jz COOLDOWN_continue1
-    ljmp FSM_DONE
+    ljmp FSM_SET_SOAK
 COOLDOWN_continue1:
     clr B1_flag_bit
     clr B2_flag_bit
@@ -608,11 +626,89 @@ skip_display6:
     ; Wait for temperature to decrease to a safe level before going to standby/reset
     load_y(50)
     lcall x_lteq_y
-    jnb mf, FSM_DONE
+    jnb mf, FSM_SET_SOAK
     mov FSM_state_decider, #STATE_RESET
     setb seconds_flag
     lcall Display_init_standby_screen
     ljmp FSM_DONE
+
+FSM_SET_SOAK:
+    mov a, FSM_state_decider
+    clr c
+    subb a, #STATE_SET_SOAK
+    jz SET_SOAK_continue1
+    ljmp FSM_SET_REFLOW
+SET_SOAK_continue1:
+    clr B7_flag_bit ; unused button
+    ; Check cancel button and return to reset if pressed
+    jnb B1_flag_bit, SET_SOAK_continue2
+    clr B1_flag_bit
+    mov FSM_state_decider, #STATE_RESET
+    setb seconds_flag
+    lcall Display_init_standby_screen
+    ljmp FSM_SET_REFLOW
+SET_SOAK_continue2:
+    ; Check set button (button 2) and go to SET_REFLOW if pressed
+    jnb B2_flag_bit, SET_SOAK_continue3
+    clr B2_flag_bit
+    mov FSM_state_decider, #STATE_SET_REFLOW
+    Display_init_set_reflow_screen()
+    ljmp FSM_SET_REFLOW
+SET_SOAK_continue3:
+    ; Check button 3 and decrement time if pressed
+    jnb B3_flag_bit, SET_SOAK_continue4
+    clr B3_flag_bit
+    Decrement_time_setting(soak_time_seconds, soak_time_minutes)
+    ljmp SET_SOAK_continue7
+SET_SOAK_continue4:
+    ; Check button 4 and increment time if pressed
+    jnb B4_flag_bit, SET_SOAK_continue5
+    clr B4_flag_bit
+    Increment_time_setting(soak_time_seconds, soak_time_minutes)
+    ljmp SET_SOAK_continue7
+SET_SOAK_continue5:
+    ; Check button 5 and decrement temp if pressed
+    jnb B5_flag_bit, SET_SOAK_continue6
+    clr B5_flag_bit
+    dec soak_temp
+    ljmp SET_SOAK_continue7
+SET_SOAK_continue6:
+    ; Check button 6 and increment temp if pressed
+    jnb B6_flag_bit, SET_SOAK_continue7
+    clr B6_flag_bit
+    inc soak_temp
+    ljmp SET_SOAK_continue7
+SET_SOAK_continue7:
+    Display_update_set_screen(soak_time_seconds, soak_time_minutes, soak_temp)
+
+FSM_SET_REFLOW:
+    mov a, FSM_state_decider
+    clr c
+    subb a, #STATE_SET_REFLOW
+    jz SET_REFLOW_continue1
+    ljmp FSM_DONE
+SET_REFLOW_continue1:
+    clr B7_flag_bit ; unused button
+    ; Check cancel button and return to reset if pressed
+    jnb B1_flag_bit, SET_REFLOW_continue2
+    clr B1_flag_bit
+    mov FSM_state_decider, #STATE_RESET
+    setb seconds_flag
+    lcall Display_init_standby_screen
+    ljmp FSM_DONE
+SET_REFLOW_continue2:
+    ; Check set button and return to reset if pressed
+    jnb B2_flag_bit, SET_REFLOW_continue3
+    clr B2_flag_bit
+    mov FSM_state_decider, #STATE_RESET
+    setb seconds_flag
+    lcall Display_init_standby_screen
+    ljmp FSM_DONE
+SET_REFLOW_continue3:
+    ; Check button 3 and decrement time if pressed
+    ; Check button 4 and increment time if pressed
+    ; Check button 5 and decrement temp if pressed
+    ; Check button 6 and increment temp if pressed
 
 FSM_DONE:
 	ljmp loop
