@@ -4,6 +4,12 @@
 ; This code was blessed by Allah (cc)
 ; Copyrights reserved. c 2020, Group Marimba
 
+; Free Pins we have:
+; 0.2
+; 0.3
+; 3.1
+; 2.6
+
 $NOLIST
 $MOD9351
 $LIST
@@ -35,7 +41,7 @@ BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
 FLASH_CE    EQU P1.0
-SOUND       EQU P1.1
+SOUND       EQU P2.7
 
 ; State numbers
 STATE_RESET EQU 0
@@ -161,6 +167,54 @@ Hex_to_bcd_8bit:
 	mov R0, a
 	ret
 
+  Send_Lower_BCD mac
+    	push ar0
+    	mov r0, %0
+    	lcall ?Send_Lower_BCD
+    	pop ar0
+    endmac
+
+    ?Send_Lower_BCD:
+    	push acc
+    	; write only the least significant digit
+    	mov a, r0
+    	anl a, #0fh
+    	orl a, #30h
+    	lcall putchar
+    	pop acc
+    	ret
+
+    Send_Upper_BCD mac
+    	push ar0
+    	mov r0, %0
+    	lcall ?Send_Upper_BCD
+    	pop ar0
+    endmac
+
+    ?Send_Upper_BCD:
+    	push acc
+    	; write only the most significant digit
+    	mov a, r0
+    	anl a, #0f0h
+    	swap a
+    	orl a, #30h
+    	lcall putchar
+    	pop acc
+    	ret
+
+  Send_BCD mac
+  	push ar0
+  	mov r0, %0
+  	lcall ?Send_BCD
+  	pop ar0
+  endmac
+
+  ?Send_BCD:
+  	lcall ?Send_Upper_BCD
+  	; write least significant digit
+  	lcall ?Send_Lower_BCD
+  	ret
+
 ; Returns temperature at thermocouple in register a
 Get_Temp:
     ;mov current_temp, LM335_ADC_REGISTER
@@ -185,6 +239,17 @@ Get_Temp:
     ; Thermocouple temp is now in y
     lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
     mov current_temp, x ; actual thermocouple temp is now in current_temp
+    ret
+
+send_putty:
+    mov a, current_temp
+    lcall Hex_to_bcd_8bit
+    Send_Lower_BCD(ar1)
+    Send_BCD(ar0)
+    mov a, #'\r'
+    lcall putchar
+    mov a, #'\n'
+    lcall putchar
     ret
 
 ; SPI ==========================================================================
@@ -328,6 +393,9 @@ main:
     lcall Timer0_Init
     lcall Timer1_Init
     setb EA ; Enable Global interrupts
+    ; lcall phython program
+    lcall InitSerialPort ; make the Phython script read it with the SPI
+    lcall SendString ; send the temperature through the SPI
 
     ; Initialize variables
     clr B1_flag_bit
@@ -378,9 +446,9 @@ main:
 
 loop:
     ; start of the state machine
+    clr SOUND
     lcall Check_Buttons
     lcall Get_Temp
-
 FSM_RESET:
     mov a, FSM_state_decider
     clr c
@@ -398,6 +466,7 @@ RESET_continue1:
     ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display1:
     ; Check set button (button 2) and change to SET_SOAK state if pressed
@@ -437,6 +506,7 @@ RAMP_TO_SOAK_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display2
     clr seconds_flag
+    lcall send_putty
     lcall Display_update_main_screen
 skip_display2:
     ; Check cancel button
@@ -494,6 +564,7 @@ SOAK_continue1:
     ; Update temp display every second
     jnb seconds_flag, skip_display3
     clr seconds_flag
+    lcall send_putty
     lcall Display_update_main_screen
 skip_display3:
     ; Check cancel button
@@ -541,6 +612,7 @@ RAMP_TO_REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display4
     clr seconds_flag
+    lcall send_putty
     lcall Display_update_main_screen
 skip_display4:
     ; Check for cancel button
@@ -585,6 +657,7 @@ REFLOW_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display5
     clr seconds_flag
+    lcall send_putty
     lcall Display_update_main_screen
 skip_display5:
     ; Check cancel button
@@ -626,6 +699,7 @@ COOLDOWN_continue1:
     ; Update temp every second
     jnb seconds_flag, skip_display6
     clr seconds_flag
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display6:
     mov PWM_Duty_Cycle255, #0 ; Shut off oven
@@ -751,6 +825,7 @@ FSM_ERROR_loop:
     jnb seconds_flag, skip_display_ERROR
     clr seconds_flag
     lcall Get_Temp
+    lcall send_putty
     Display_update_temperature(current_temp)
 skip_display_ERROR:
     sjmp FSM_ERROR_loop
@@ -758,7 +833,7 @@ skip_display_ERROR:
 END
 
 ; JAMES 1:12
-; BEATUS VIR QVI SVFFERT TENTATIONEM
+; BEATVS VIR QVI SVFFERT TENTATIONEM
 ; QVIANIQM CVM
 ; PROBATVS FVERIT ACCIPIET
 ; CORONAM VITAE
