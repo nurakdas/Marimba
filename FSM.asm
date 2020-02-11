@@ -447,7 +447,7 @@ Play_Sound_Using_Index:
 	mov a, #0x00 ; Request first byte to send to DAC
 	lcall Send_SPI
 
-  clr SOUND
+  ;clr SOUND
 	setb TMOD20 ; Start playback by enabling CCU timer
 	pop b
 	ret
@@ -571,6 +571,7 @@ main:
     lcall Ports_Init ; Default all pins as bidirectional I/O. See Table 42.
     lcall LCD_4BIT
     lcall Double_Clk
+    lcall InitSerialPort ; make the Phython script read it with the SPI
 	;lcall InitSerialPort ; For sound
 	  lcall InitADC0 ; Call after 'Ports_Init'
 	  lcall InitDAC1 ; Call after 'Ports_Init'
@@ -580,12 +581,12 @@ main:
     lcall Timer1_Init
     setb EA ; Enable Global interrupts
     ; lcall phython program
-    lcall InitSerialPort ; make the Phython script read it with the SPI
     lcall SendString ; send the temperature through the SPI
     lcall CCU_Init
     lcall Init_SPI
 
     ; Initialize variables
+    clr TMOD20
     clr B1_flag_bit
     clr B2_flag_bit
     clr B3_flag_bit
@@ -638,7 +639,6 @@ main:
 
 loop:
     ; start of the state machine
-    clr SOUND
     lcall Check_Buttons
     lcall Get_Temp
     lcall T2S_FSM
@@ -696,6 +696,7 @@ RESET_check_start_button:
     jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
     clr B1_flag_bit
 	inc FSM_state_decider
+    Display_init_main_screen(display_mode_ramp1)
     lcall Say_RamptoSoak
     ; Reset state and total stopwatches
     clr a
@@ -704,7 +705,6 @@ RESET_check_start_button:
     mov seconds_total, a
     mov minutes_total, a
     setb seconds_flag
-    Display_init_main_screen(display_mode_ramp1)
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     mov a, FSM_state_decider
