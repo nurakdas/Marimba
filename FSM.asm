@@ -40,7 +40,7 @@ LM335_ADC_REGISTER equ AD0DAT0 ; on pin P1.7
 BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
-FLASH_CE    EQU P1.0
+FLASH_CE    EQU P2.4
 SOUND       EQU P2.7
 
 ; State numbers
@@ -78,6 +78,9 @@ org 0x001B
 org 0x0023
 	reti
 
+org 0x005b
+  lcall CCU_ISR
+
 ; DSEG and BSEG variables ======================================================
 dseg at 0x30
 ; for soundinit.inc ;
@@ -92,7 +95,16 @@ soak_time_minutes: ds 1
 reflow_temp: ds 1
 reflow_time_seconds: ds 1
 reflow_time_minutes: ds 1
-
+;audio
+T2S_FSM_state: ds 1
+RamptoSoak_State: ds 1
+Soak_State:				ds 1
+RamptoReflow_State: ds 1
+Reflow_State: ds 1
+Cooling_State: ds 1
+Ding_State: ds 1
+AbortingProcess_State: ds 1
+SolderingProcessComplete_State: ds 1
 
 FSM_state_decider: ds 1 ; HELPS US SEE WHICH STATE WE ARE IN
 ; Button FSM Variables:
@@ -140,6 +152,16 @@ B5_flag_bit: dbit 1
 B6_flag_bit: dbit 1
 B7_flag_bit: dbit 1
 mf:	dbit 1
+;Audio
+T2S_FSM_start: dbit 1
+Say_RamptoSoak_flag: 								dbit 1
+Say_Soak_flag: 											dbit 1
+Say_RamptoReflow_flag: 							dbit 1
+Say_Reflow_flag: 										dbit 1
+Say_Cooling_flag: 									dbit 1
+Say_AbortingProcess_flag: 					dbit 1
+Say_Ding_flag: 											dbit 1
+Say_SolderingProcessComplete_flag:  dbit 1
 
 ; ==============================================================================
 cseg
@@ -150,6 +172,7 @@ $include(timers.inc)
 $include(button_ops.inc)
 $include(soundinit.inc)
 $include(LCD_ops.inc)
+$include(audio.inc)
 $LIST
 
 ; The 8-bit hex number passed in the accumulator is converted to
@@ -378,6 +401,169 @@ ADC_to_PB_L0:
 	ret
 ;------------------------------END OF ADDED BY PLATEMAN----------------------------
 
+;---------------------------------------Audio Init------------------------------
+; ; Function to play audio through the speaker
+Play_Sound_Using_Index:
+	push b
+	setb SOUND ; Turn speaker on
+	clr TMOD20 ; Stop the CCU from playing previous request
+	setb FLASH_CE
+
+	; There are three bytes per row in our tables, so multiply index by three
+	mov b, #3
+	mul ab
+	mov R0, a ; Make a copy of the index*3
+
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory of where to start playing
+	mov dptr, #sound_index
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	; Now set how many bytes to play
+	mov dptr, #Size_Length
+	mov a, R0
+	movc a, @a+dptr
+	mov w+2, a
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	mov w+1, a
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	mov w+0, a
+
+	mov a, #0x00 ; Request first byte to send to DAC
+	lcall Send_SPI
+
+  clr SOUND
+	setb TMOD20 ; Start playback by enabling CCU timer
+	pop b
+	ret
+
+; Approximate index of sounds in file 'Project1Sounds.wav'
+sound_index:
+    db 0x00, 0x00, 0x2b ; 0
+    db 0x00, 0x26, 0xc0 ; 1
+    db 0x00, 0x4f, 0xea ; 2
+    db 0x00, 0x7d, 0xe5 ; 3
+    db 0x00, 0xb6, 0x58 ; 4
+    db 0x00, 0xec, 0x17 ; 5
+    db 0x01, 0x2c, 0x1c ; 6
+    db 0x01, 0x63, 0x25 ; 7
+    db 0x01, 0x8f, 0x85 ; 8
+    db 0x01, 0xc7, 0x20 ; 9
+    db 0x02, 0x02, 0x56 ; 10
+    db 0x02, 0x41, 0x0d ; 11
+    db 0x02, 0x7c, 0x5e ; 12
+    db 0x02, 0xbd, 0xe4 ; 13
+    db 0x03, 0x0b, 0xea ; 14
+    db 0x03, 0x4d, 0x6d ; 15
+    db 0x03, 0x98, 0xaa ; 16
+    db 0x03, 0xed, 0x93 ; 17
+    db 0x04, 0x33, 0xa0 ; 18
+    db 0x04, 0x86, 0xd8 ; 19
+    db 0x04, 0xd2, 0x88 ; 20
+    db 0x05, 0x0c, 0x03 ; 21
+    db 0x05, 0x4b, 0x73 ; 22
+    db 0x05, 0x8a, 0xbc ; 23
+    db 0x05, 0xd0, 0x2a ; 24
+    db 0x06, 0x13, 0x3f ; 25
+    db 0x06, 0x42, 0x0f ; 26
+    db 0x06, 0x7e, 0xa9 ; 27
+    db 0x06, 0xbb, 0x20 ; 28
+    db 0x06, 0xef, 0x15 ; 29
+    db 0x07, 0x19, 0x31 ; 30
+    db 0x07, 0x51, 0x7c ; 31
+    db 0x07, 0x93, 0x94 ; 32
+    db 0x07, 0xce, 0x4e ; 33
+    db 0x08, 0x0a, 0x56 ; 34
+    db 0x08, 0x4d, 0x94 ; 35
+    db 0x08, 0x92, 0x50 ; 36
+    db 0x08, 0xcc, 0x77 ; 37
+    db 0x08, 0xf6, 0x71 ; 38
+    db 0x09, 0x35, 0x97 ; 39
+    db 0x09, 0x77, 0xb6 ; 40
+    db 0x09, 0xa8, 0xb0 ; 41
+    db 0x09, 0xea, 0xff ; 42
+    db 0x0a, 0x0e, 0x6a ; 43
+    db 0x0a, 0x36, 0xc4 ; 44
+    db 0x0a, 0x6f, 0x37 ; 45
+    db 0x0a, 0x8e, 0xfe ; 46
+    db 0x0a, 0xb8, 0xc4 ; 47
+    db 0x0a, 0xd9, 0xbc ; 48
+    db 0x0a, 0xf9, 0xe7 ; 49
+    db 0x0b, 0x31, 0xe8 ; 50
+    db 0x0b, 0x63, 0xee ; 51
+    db 0x0b, 0xb3, 0x56
+
+; Size of each sound in 'sound_index'
+Size_Length:
+    db 0x00, 0x26, 0x95 ; 0 = '1'
+    db 0x00, 0x29, 0x2a ; 1 = '2'
+    db 0x00, 0x2d, 0xfb ; 2 = '3'
+    db 0x00, 0x38, 0x73 ; 3 = '4'
+    db 0x00, 0x35, 0xbf ; 4 = '5'
+    db 0x00, 0x40, 0x05 ; 5 = '6'
+    db 0x00, 0x37, 0x09 ; 6 = '7'
+    db 0x00, 0x2c, 0x60 ; 7 = '8'
+    db 0x00, 0x37, 0x9b ; 8 = '9'
+    db 0x00, 0x3b, 0x36 ; 9 = '10'
+    db 0x00, 0x3e, 0xb7 ; 10 = '11'
+    db 0x00, 0x3b, 0x51 ; 11 = '12'
+    db 0x00, 0x41, 0x86 ; 12 = '13'
+    db 0x00, 0x4e, 0x06 ; 13 = '14'
+    db 0x00, 0x41, 0x83 ; 14 = '15'
+    db 0x00, 0x4b, 0x3d ; 15 = '16'
+    db 0x00, 0x54, 0xe9 ; 16 = '17'
+    db 0x00, 0x46, 0x0d ; 17 = '18'
+    db 0x00, 0x53, 0x38 ; 18 = '19'
+    db 0x00, 0x4b, 0xb0 ; 19 = '20'
+    db 0x00, 0x39, 0x7b ; 20 = '30'
+    db 0x00, 0x3f, 0x70 ; 21 = '40'
+    db 0x00, 0x3f, 0x49 ; 22 = '50'
+    db 0x00, 0x45, 0x6e ; 23 = '60'
+    db 0x00, 0x43, 0x15 ; 24 = '70'
+    db 0x00, 0x2e, 0xd0 ; 25 = '80'
+    db 0x00, 0x3c, 0x9a ; 26 = '90'
+    db 0x00, 0x3c, 0x77 ; 27 = 'hundred'
+    db 0x00, 0x33, 0xf5 ; 28 = 'ramp'
+    db 0x00, 0x2a, 0x1c ; 29 = 'to'
+    db 0x00, 0x38, 0x4b ; 30 = 'soak'
+    db 0x00, 0x42, 0x18 ; 31 = 'reflow'
+    db 0x00, 0x3a, 0xba ; 32 = 'cooling'
+    db 0x00, 0x3c, 0x08 ; 33 = 'stage'
+    db 0x00, 0x43, 0x3e ; 34 = 'seconds'
+    db 0x00, 0x44, 0xbc ; 35 = 'celsius'
+    db 0x00, 0x3a, 0x27 ; 36 = 'current_temp'
+    db 0x00, 0x29, 0xfa ; 37 = 'ding'
+    db 0x00, 0x3f, 0x26 ; 38 = 'soldering'
+    db 0x00, 0x42, 0x1f ; 39 = 'complete'
+    db 0x00, 0x30, 0xfa ; 40 = 'oven'
+    db 0x00, 0x42, 0x4f ; 41 = 'temperature'
+    db 0x00, 0x23, 0x6b ; 42 = 'is'
+    db 0x00, 0x28, 0x5a ; 43 = 'time'
+    db 0x00, 0x38, 0x73 ; 44 = 'remaining'
+    db 0x00, 0x1f, 0xc7 ; 45 = 'in'
+    db 0x00, 0x29, 0xc6 ; 46 = 'please'
+    db 0x00, 0x20, 0xf8 ; 47 = 'kill'
+    db 0x00, 0x20, 0x2b ; 48 = 'me'
+    db 0x00, 0x38, 0x01 ; 49 = 'aborting'
+    db 0x00, 0x32, 0x06 ; 50 = 'process'
+    db 0x00, 0x4f, 0x68 ; 51 = 'switch'
+;---------------------------------------Audio end-------------------------------
+
 ; MAIN =========================================================================
 main:
 	; Initialization of hardware
@@ -396,6 +582,8 @@ main:
     ; lcall phython program
     lcall InitSerialPort ; make the Phython script read it with the SPI
     lcall SendString ; send the temperature through the SPI
+    lcall CCU_Init
+    lcall Init_SPI
 
     ; Initialize variables
     clr B1_flag_bit
@@ -431,12 +619,12 @@ main:
     Load_y(0)
 
     ; Default Temperature profile parameters
-    mov soak_temp, #80
+    mov soak_temp, #150
     mov soak_time_minutes, #1
-    mov soak_time_seconds, #0
+    mov soak_time_seconds, #20
     mov reflow_temp, #230
-    mov reflow_time_seconds, #40
-    mov reflow_time_minutes, #0
+    mov reflow_time_seconds, #0
+    mov reflow_time_minutes, #1
 
 	; After initialization the program stays in this 'forever' loop
     mov FSM_state_decider, #0
@@ -444,11 +632,16 @@ main:
     lcall Display_init_standby_screen
     setb seconds_flag
 
+    ;Audio
+    mov T2S_FSM_state, #0
+
+
 loop:
     ; start of the state machine
     clr SOUND
     lcall Check_Buttons
     lcall Get_Temp
+    lcall T2S_FSM
 FSM_RESET:
     mov a, FSM_state_decider
     clr c
@@ -456,6 +649,29 @@ FSM_RESET:
 	jz RESET_continue1
     ljmp FSM_RAMP_TO_SOAK ; jump to next state check if state decider doesn't match
 RESET_continue1:
+
+    ;clearing Audio at the start
+    mov RamptoSoak_State, #0
+    mov Soak_State, #0
+    mov RamptoReflow_State, #0
+    mov Reflow_State, #0
+    mov Cooling_State, #0
+    mov Ding_State, #0
+    mov AbortingProcess_State, #0
+    mov SolderingProcessComplete_State, #0
+    ;---------------------------
+
+    ;setting Audio flags
+    setb Say_RamptoSoak_flag
+    setb Say_Soak_flag
+    setb Say_RamptoReflow_flag
+    setb Say_Reflow_flag
+    setb Say_Cooling_flag
+    setb Say_AbortingProcess_flag
+    setb Say_Ding_flag
+    setb Say_SolderingProcessComplete_flag
+    ;-------------------
+
     mov PWM_Duty_Cycle255, #0
 
     clr B3_flag_bit
@@ -480,6 +696,7 @@ RESET_check_start_button:
     jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
     clr B1_flag_bit
 	inc FSM_state_decider
+    lcall Say_RamptoSoak
     ; Reset state and total stopwatches
     clr a
     mov seconds_state, a
@@ -541,6 +758,7 @@ RAMP_TO_SOAK_continue3:
     ljmp FSM_SOAK
 RAMP_TO_SOAK_continue4:
     inc FSM_state_decider
+    lcall Say_Soak
     clr a
     mov seconds_state, a
     mov minutes_state, a
@@ -586,6 +804,7 @@ SOAK_continue2:
     subb a, soak_time_seconds
     jnz SOAK_continue3
     inc FSM_state_decider
+    lcall Say_RamptoReflow
     clr a
     mov seconds_state, a
     mov minutes_state, a
@@ -633,7 +852,8 @@ RAMP_TO_REFLOW_continue2:
     mov y+3, a
     lcall x_gteq_y
     jnb mf, FSM_REFLOW
-	inc FSM_state_decider
+	  inc FSM_state_decider
+    lcall Say_Reflow
     ; Reset state stopwatch
     clr a
     mov seconds_state, a
@@ -680,6 +900,7 @@ REFLOW_continue2:
     subb a, reflow_time_seconds
     jnz FSM_COOLDOWN
     inc FSM_state_decider
+    lcall Say_Cooling
     setb seconds_flag
     Display_init_main_screen(display_mode_cooldown)
 
@@ -709,6 +930,8 @@ skip_display6:
     lcall x_lteq_y
     jnb mf, FSM_SET_SOAK
     mov FSM_state_decider, #STATE_RESET
+    lcall Say_Ding
+    lcall Say_SolderingProcessComplete
     setb seconds_flag
     lcall Display_init_standby_screen
     ljmp FSM_DONE
