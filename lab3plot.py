@@ -73,5 +73,5 @@ xdata, ydata = [], []
 
 # Important: Although blit=True makes graphing faster, we need blit=False to prevent
 # spurious lines to appear when resizing the stripchart.
-ani = animation.FuncAnimation(fig, run, data_gen, blit=False, interval=1000, repeat=False)
+ani = animation.FuncAnimation(fig, run, data_gen, blit=False, interval=500, repeat=False)
 plt.show()

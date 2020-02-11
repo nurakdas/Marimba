@@ -577,23 +577,24 @@ skip_display3:
 SOAK_continue2:
     mov PWM_Duty_Cycle255, #51
     ; Check if soak time has elapsed
-    mov a, seconds_state
-    clr c
-    subb a, soak_time_seconds
-    jz SOAK_continue3
     mov a, minutes_state
     clr c
     subb a, soak_time_minutes
-    jz SOAK_continue3
-    ljmp FSM_RAMP_TO_REFLOW
-SOAK_continue3:
-    ; Go to next state if so
-	inc FSM_state_decider
+    jnz SOAK_continue3
+    mov a, seconds_state
+    clr c
+    subb a, soak_time_seconds
+    jnz SOAK_continue3
+    inc FSM_state_decider
     clr a
     mov seconds_state, a
     mov minutes_state, a
     setb seconds_flag
     Display_init_main_screen(display_mode_ramp2)
+    ;setb seconds_flag
+    ; ljmp FSM_RAMP_TO_REFLOW
+SOAK_continue3:
+    ; Go to next state if so
 
 FSM_RAMP_TO_REFLOW:
 	; HEAT THE OVEN ;
