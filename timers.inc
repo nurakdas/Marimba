@@ -169,7 +169,7 @@ Timer1_check_twenty:
 	mov a, extension_counter2
 	cjne a, #20, Timer1_ISR_done
 	mov extension_counter2, #0
-	; setb T2S_FSM_start TODO: uncomment once sound stuff is implemented
+	setb T2S_FSM_start ;TODO: uncomment once sound stuff is implemented
 
 Timer1_ISR_done:
 	pop psw

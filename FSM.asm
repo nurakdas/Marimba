@@ -40,7 +40,7 @@ LM335_ADC_REGISTER equ AD0DAT0 ; on pin P1.7
 BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
 ; soundinit.inc buttons
-FLASH_CE    EQU P1.0
+FLASH_CE    EQU P2.4
 SOUND       EQU P2.7
 
 ; State numbers
@@ -78,9 +78,21 @@ org 0x001B
 org 0x0023
 	reti
 
+org 0x005b
+  ljmp CCU_ISR
+
 ; DSEG and BSEG variables ======================================================
 dseg at 0x30
 ; for soundinit.inc ;
+T2S_FSM_state: ds 1
+RamptoSoak_State: ds 1
+Soak_State:				ds 1
+RamptoReflow_State: ds 1
+Reflow_State: ds 1
+Cooling_State: ds 1
+Ding_State: ds 1
+AbortingProcess_State: ds 1
+SolderingProcessComplete_State: ds 1
 w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 ;soak_time_total: ds 1
 ;reflow_time_total: ds 1
@@ -140,6 +152,18 @@ B5_flag_bit: dbit 1
 B6_flag_bit: dbit 1
 B7_flag_bit: dbit 1
 mf:	dbit 1
+Speakflag: dbit 1
+
+
+T2S_FSM_start: dbit 1
+Say_RamptoSoak_flag: 								dbit 1
+Say_Soak_flag: 											dbit 1
+Say_RamptoReflow_flag: 							dbit 1
+Say_Reflow_flag: 										dbit 1
+Say_Cooling_flag: 									dbit 1
+Say_AbortingProcess_flag: 					dbit 1
+Say_Ding_flag: 											dbit 1
+Say_SolderingProcessComplete_flag:  dbit 1
 
 ; ==============================================================================
 cseg
@@ -150,6 +174,7 @@ $include(timers.inc)
 $include(button_ops.inc)
 $include(soundinit.inc)
 $include(LCD_ops.inc)
+$include(audio.inc)
 $LIST
 
 ; The 8-bit hex number passed in the accumulator is converted to
@@ -214,7 +239,116 @@ Hex_to_bcd_8bit:
   	; write least significant digit
   	lcall ?Send_Lower_BCD
   	ret
+    ; ; Approximate index of sounds in file 'Project1Sounds.wav'
+    sound_index:
+        db 0x00, 0x00, 0x2b ; 0
+        db 0x00, 0x26, 0xc0 ; 1
+        db 0x00, 0x4f, 0xea ; 2
+        db 0x00, 0x7d, 0xe5 ; 3
+        db 0x00, 0xb6, 0x58 ; 4
+        db 0x00, 0xec, 0x17 ; 5
+        db 0x01, 0x2c, 0x1c ; 6
+        db 0x01, 0x63, 0x25 ; 7
+        db 0x01, 0x8f, 0x85 ; 8
+        db 0x01, 0xc7, 0x20 ; 9
+        db 0x02, 0x02, 0x56 ; 10
+        db 0x02, 0x41, 0x0d ; 11
+        db 0x02, 0x7c, 0x5e ; 12
+        db 0x02, 0xbd, 0xe4 ; 13
+        db 0x03, 0x0b, 0xea ; 14
+        db 0x03, 0x4d, 0x6d ; 15
+        db 0x03, 0x98, 0xaa ; 16
+        db 0x03, 0xed, 0x93 ; 17
+        db 0x04, 0x33, 0xa0 ; 18
+        db 0x04, 0x86, 0xd8 ; 19
+        db 0x04, 0xd2, 0x88 ; 20
+        db 0x05, 0x0c, 0x03 ; 21
+        db 0x05, 0x4b, 0x73 ; 22
+        db 0x05, 0x8a, 0xbc ; 23
+        db 0x05, 0xd0, 0x2a ; 24
+        db 0x06, 0x13, 0x3f ; 25
+        db 0x06, 0x42, 0x0f ; 26
+        db 0x06, 0x7e, 0xa9 ; 27
+        db 0x06, 0xbb, 0x20 ; 28
+        db 0x06, 0xef, 0x15 ; 29
+        db 0x07, 0x19, 0x31 ; 30
+        db 0x07, 0x51, 0x7c ; 31
+        db 0x07, 0x93, 0x94 ; 32
+        db 0x07, 0xce, 0x4e ; 33
+        db 0x08, 0x0a, 0x56 ; 34
+        db 0x08, 0x4d, 0x94 ; 35
+        db 0x08, 0x92, 0x50 ; 36
+        db 0x08, 0xcc, 0x77 ; 37
+        db 0x08, 0xf6, 0x71 ; 38
+        db 0x09, 0x35, 0x97 ; 39
+        db 0x09, 0x77, 0xb6 ; 40
+        db 0x09, 0xa8, 0xb0 ; 41
+        db 0x09, 0xea, 0xff ; 42
+        db 0x0a, 0x0e, 0x6a ; 43
+        db 0x0a, 0x36, 0xc4 ; 44
+        db 0x0a, 0x6f, 0x37 ; 45
+        db 0x0a, 0x8e, 0xfe ; 46
+        db 0x0a, 0xb8, 0xc4 ; 47
+        db 0x0a, 0xd9, 0xbc ; 48
+        db 0x0a, 0xf9, 0xe7 ; 49
+        db 0x0b, 0x31, 0xe8 ; 50
+        db 0x0b, 0x63, 0xee ; 51
+        db 0x0b, 0xb3, 0x56
 
+    ; Size of each sound in 'sound_index'
+    Size_Length:
+        db 0x00, 0x26, 0x95 ; 0 = '1'
+        db 0x00, 0x29, 0x2a ; 1 = '2'
+        db 0x00, 0x2d, 0xfb ; 2 = '3'
+        db 0x00, 0x38, 0x73 ; 3 = '4'
+        db 0x00, 0x35, 0xbf ; 4 = '5'
+        db 0x00, 0x40, 0x05 ; 5 = '6'
+        db 0x00, 0x37, 0x09 ; 6 = '7'
+        db 0x00, 0x2c, 0x60 ; 7 = '8'
+        db 0x00, 0x37, 0x9b ; 8 = '9'
+        db 0x00, 0x3b, 0x36 ; 9 = '10'
+        db 0x00, 0x3e, 0xb7 ; 10 = '11'
+        db 0x00, 0x3b, 0x51 ; 11 = '12'
+        db 0x00, 0x41, 0x86 ; 12 = '13'
+        db 0x00, 0x4e, 0x06 ; 13 = '14'
+        db 0x00, 0x41, 0x83 ; 14 = '15'
+        db 0x00, 0x4b, 0x3d ; 15 = '16'
+        db 0x00, 0x54, 0xe9 ; 16 = '17'
+        db 0x00, 0x46, 0x0d ; 17 = '18'
+        db 0x00, 0x53, 0x38 ; 18 = '19'
+        db 0x00, 0x4b, 0xb0 ; 19 = '20'
+        db 0x00, 0x39, 0x7b ; 20 = '30'
+        db 0x00, 0x3f, 0x70 ; 21 = '40'
+        db 0x00, 0x3f, 0x49 ; 22 = '50'
+        db 0x00, 0x45, 0x6e ; 23 = '60'
+        db 0x00, 0x43, 0x15 ; 24 = '70'
+        db 0x00, 0x2e, 0xd0 ; 25 = '80'
+        db 0x00, 0x3c, 0x9a ; 26 = '90'
+        db 0x00, 0x3c, 0x77 ; 27 = 'hundred'
+        db 0x00, 0x33, 0xf5 ; 28 = 'ramp'
+        db 0x00, 0x2a, 0x1c ; 29 = 'to'
+        db 0x00, 0x38, 0x4b ; 30 = 'soak'
+        db 0x00, 0x42, 0x18 ; 31 = 'reflow'
+        db 0x00, 0x3a, 0xba ; 32 = 'cooling'
+        db 0x00, 0x3c, 0x08 ; 33 = 'stage'
+        db 0x00, 0x43, 0x3e ; 34 = 'seconds'
+        db 0x00, 0x44, 0xbc ; 35 = 'celsius'
+        db 0x00, 0x3a, 0x27 ; 36 = 'current_temp'
+        db 0x00, 0x29, 0xfa ; 37 = 'ding'
+        db 0x00, 0x3f, 0x26 ; 38 = 'soldering'
+        db 0x00, 0x42, 0x1f ; 39 = 'complete'
+        db 0x00, 0x30, 0xfa ; 40 = 'oven'
+        db 0x00, 0x42, 0x4f ; 41 = 'temperature'
+        db 0x00, 0x23, 0x6b ; 42 = 'is'
+        db 0x00, 0x28, 0x5a ; 43 = 'time'
+        db 0x00, 0x38, 0x73 ; 44 = 'remaining'
+        db 0x00, 0x1f, 0xc7 ; 45 = 'in'
+        db 0x00, 0x29, 0xc6 ; 46 = 'please'
+        db 0x00, 0x20, 0xf8 ; 47 = 'kill'
+        db 0x00, 0x20, 0x2b ; 48 = 'me'
+        db 0x00, 0x38, 0x01 ; 49 = 'aborting'
+        db 0x00, 0x32, 0x06 ; 50 = 'process'
+        db 0x00, 0x4f, 0x68 ; 51 = 'switch'
 ; Returns temperature at thermocouple in register a
 Get_Temp:
     ;mov current_temp, LM335_ADC_REGISTER
@@ -278,8 +412,8 @@ InitSerialPort:
 	mov	BRGR0,#low(BRVAL)
 	mov	BRGCON,#0x03 ; Turn-on the baud rate generator
 	mov	SCON,#0x52 ; Serial port in mode 1, ren, txrdy, rxempty
-	mov	P1M1,#0x00 ; Enable pins RxD and TXD
-	mov	P1M2,#0x00 ; Enable pins RxD and TXD
+  anl	P1M1,#11111100B
+	anl	P1M2,#11111100B
 	ret
 
 ; Send a character using the serial port
@@ -383,18 +517,19 @@ main:
 	; Initialization of hardware
     mov SP, #0x7F
     lcall Ports_Init ; Default all pins as bidirectional I/O. See Table 42.
-    lcall LCD_4BIT
     lcall Double_Clk
+    lcall InitSerialPort ; make the Phython script read it with the SPI
+    lcall LCD_4BIT
 	;lcall InitSerialPort ; For sound
 	  lcall InitADC0 ; Call after 'Ports_Init'
-	  lcall InitDAC1 ; Call after 'Ports_Init'
-	;lcall CCU_Inits ; for sound
-	;lcall Init_SPI ; for sound
+	  lcall InitDAC1 ; Call after 'Ports_Init',
+	  lcall CCU_Init ; for sound
+	  lcall Init_SPI ; for sound
     lcall Timer0_Init
     lcall Timer1_Init
+    clr TMOD20
     setb EA ; Enable Global interrupts
     ; lcall phython program
-    lcall InitSerialPort ; make the Phython script read it with the SPI
     lcall SendString ; send the temperature through the SPI
 
     ; Initialize variables
@@ -427,6 +562,7 @@ main:
     mov BFSM6_timer, a
     mov BFSM7_timer, a
     mov current_temp, a
+    clr speakflag
     Load_X(0)
     Load_y(0)
 
@@ -443,10 +579,30 @@ main:
     mov PWM_Duty_Cycle255, #0
     lcall Display_init_standby_screen
     setb seconds_flag
+start1:
+    mov T2S_FSM_State, #0
+    clr T2S_FSM_start
+    setb Say_RamptoSoak_flag
+    mov RamptoSoak_State, #0
+    setb Say_Soak_flag
+    mov Soak_State, #0
+    setb Say_RamptoReflow_flag
+    mov RamptoReflow_State, #0
+    setb Say_Reflow_flag
+    mov Reflow_State, #0
+    setb Say_Cooling_flag
+    mov Cooling_State, #0
+    setb Say_AbortingProcess_flag
+    mov AbortingProcess_State, #0
+    setb Say_Ding_flag
+    mov Ding_State, #0
+    setb Say_SolderingProcessComplete_flag
+    mov SolderingProcessComplete_State, #0
 
 loop:
     ; start of the state machine
-    clr SOUND
+    ; clr SOUND
+    lcall T2S_FSM
     lcall Check_Buttons
     lcall Get_Temp
 FSM_RESET:
@@ -457,7 +613,7 @@ FSM_RESET:
     ljmp FSM_RAMP_TO_SOAK ; jump to next state check if state decider doesn't match
 RESET_continue1:
     mov PWM_Duty_Cycle255, #0
-
+    clr T2S_FSM_start
     clr B3_flag_bit
     clr B4_flag_bit
     clr B5_flag_bit
@@ -497,6 +653,7 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     ljmp FSM_SOAK ; go to check for next state
 RAMP_TO_SOAK_continue1:
     mov PWM_Duty_Cycle255, #255
+    lcall Say_RamptoSoak
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
@@ -554,6 +711,7 @@ FSM_SOAK:
     jz SOAK_continue1
     ljmp FSM_RAMP_TO_REFLOW ; go to next state check
 SOAK_continue1:
+    lcall Say_Soak
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
@@ -604,6 +762,7 @@ FSM_RAMP_TO_REFLOW:
     jz RAMP_TO_REFLOW_continue1
     ljmp FSM_REFLOW ; go to next state check
 RAMP_TO_REFLOW_continue1:
+    lcall Say_RamptoReflow
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
@@ -649,6 +808,7 @@ FSM_REFLOW:
     jz REFLOW_continue1
     ljmp FSM_COOLDOWN
 REFLOW_continue1:
+    lcall Say_Reflow
     clr B2_flag_bit
     clr B3_flag_bit
     clr B4_flag_bit
@@ -690,6 +850,7 @@ FSM_COOLDOWN:
     jz COOLDOWN_continue1
     ljmp FSM_SET_SOAK
 COOLDOWN_continue1:
+    lcall Say_Cooling
     clr B1_flag_bit
     clr B2_flag_bit
     clr B3_flag_bit
@@ -704,6 +865,8 @@ COOLDOWN_continue1:
     Display_update_temperature(current_temp)
 skip_display6:
     mov PWM_Duty_Cycle255, #0 ; Shut off oven
+    lcall Say_Ding
+  ;  lcall Say_SolderingProcessComplete
     ; Wait for temperature to decrease to a safe level before going to standby/reset
     load_y(50)
     lcall x_lteq_y
@@ -711,7 +874,7 @@ skip_display6:
     mov FSM_state_decider, #STATE_RESET
     setb seconds_flag
     lcall Display_init_standby_screen
-    ljmp FSM_DONE
+    ljmp start1
 
 FSM_SET_SOAK:
     mov a, FSM_state_decider
@@ -720,7 +883,8 @@ FSM_SET_SOAK:
     jz SET_SOAK_continue1
     ljmp FSM_SET_REFLOW
 SET_SOAK_continue1:
-    clr B7_flag_bit ; unused button
+    clr SOUND
+    clr B7_flag_bit ; unused button,
     ; Check cancel button and return to reset if pressed
     jnb B1_flag_bit, SET_SOAK_continue2
     clr B1_flag_bit
@@ -770,6 +934,7 @@ FSM_SET_REFLOW:
     ljmp FSM_DONE
 SET_REFLOW_continue1:
     clr B7_flag_bit ; unused button
+    clr SOUND
     ; Check cancel button and return to reset if pressed
     jnb B1_flag_bit, SET_REFLOW_continue2
     clr B1_flag_bit
@@ -819,6 +984,7 @@ FSM_DONE:
 FSM_ERROR:
     ; This is a terminal state. Escape requires reset.
     mov PWM_Duty_Cycle255, #0
+    lcall Say_AbortingProcess
     Display_init_main_screen(display_mode_error)
     lcall Display_clear_line2
 FSM_ERROR_loop:

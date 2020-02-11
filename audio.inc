@@ -6,53 +6,53 @@
 
 ;testing -------------------------------
 ; ; Function to play audio through the speaker
-; Play_Sound_Using_Index:
-; 	push b
-; 	setb SOUND ; Turn speaker on
-; 	clr TMOD20 ; Stop the CCU from playing previous request
-; 	setb FLASH_CE
-;
-; 	; There are three bytes per row in our tables, so multiply index by three
-; 	mov b, #3
-; 	mul ab
-; 	mov R0, a ; Make a copy of the index*3
-;
-; 	clr FLASH_CE ; Enable SPI Flash
-; 	mov a, #READ_BYTES
-; 	lcall Send_SPI
-; 	; Set the initial position in memory of where to start playing
-; 	mov dptr, #sound_index
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	lcall Send_SPI
-; 	inc dptr
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	lcall Send_SPI
-; 	inc dptr
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	lcall Send_SPI
-; 	; Now set how many bytes to play
-; 	mov dptr, #Size_Length
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	mov w+2, a
-; 	inc dptr
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	mov w+1, a
-; 	inc dptr
-; 	mov a, R0
-; 	movc a, @a+dptr
-; 	mov w+0, a
-;
-; 	mov a, #0x00 ; Request first byte to send to DAC
-; 	lcall Send_SPI
-;
-; 	setb TMOD20 ; Start playback by enabling CCU timer
-; 	pop b
-; 	ret
+Play_Sound_Using_Index:
+	push b
+	setb SOUND ; Turn speaker on
+	clr TMOD20 ; Stop the CCU from playing previous request
+	setb FLASH_CE
+
+	; There are three bytes per row in our tables, so multiply index by three
+	mov b, #3
+	mul ab
+	mov R0, a ; Make a copy of the index*3
+
+	clr FLASH_CE ; Enable SPI Flash
+	mov a, #READ_BYTES
+	lcall Send_SPI
+	; Set the initial position in memory of where to start playing
+	mov dptr, #sound_index
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	lcall Send_SPI
+	; Now set how many bytes to play
+	mov dptr, #Size_Length
+	mov a, R0
+	movc a, @a+dptr
+	mov w+2, a
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	mov w+1, a
+	inc dptr
+	mov a, R0
+	movc a, @a+dptr
+	mov w+0, a
+
+	mov a, #0x00 ; Request first byte to send to DAC
+	lcall Send_SPI
+
+	setb TMOD20 ; Start playback by enabling CCU timer
+	pop b
+	ret
 ;
 ; ; Approximate index of sounds in file 'Project1Sounds.wav'
 ; sound_index:
@@ -172,6 +172,7 @@ T2S_FSM:
 T2S_FSM_State0: ; Checks for the start signal (T2S_FSM_Start==1) "T2S_FSM_Start==1 when routine is called by controller"
 	cjne a, #0, T2S_FSM_State1
 	jnb T2S_FSM_Start, T2S_FSM_State0_Done
+	jb Speakflag, T2S_FSM_State0_Done
 	; Check if current_temp is larger than 19
 	clr c
 	mov a, current_temp
@@ -324,6 +325,7 @@ Say_RamptoSoak:
 RamptoSoak_State0: ; Play first word
 	cjne a, #0, RamptoSoak_State1
 	jnb Say_RamptoSoak_flag, Say_RamptoSoak_done
+	setb Speakflag
 	clr c
 	mov a, #28
   lcall Play_Sound_Using_Index ;"Ramp"
@@ -364,6 +366,7 @@ RamptoSoak_State5: ; Wait for third word to finish playing
 	jb TMOD20, RamptoSoak_State5_done
 	clr Say_RamptoSoak_flag
 	mov RamptoSoak_State, #0
+	clr Speakflag
 RamptoSoak_State5_done:
 	ret
 
@@ -379,6 +382,7 @@ Say_Soak:
 Soak_State0: ; Play first word
 	cjne a, #0, Soak_State1
 	jnb Say_Soak_flag, Say_Soak_done
+	setb Speakflag
 	clr c
 	mov a, #30
   lcall Play_Sound_Using_Index ; "Soak"
@@ -391,6 +395,7 @@ Soak_State1: ; Wait for first word to finish playing
 	jb TMOD20, Soak_State1_done
 	mov Soak_State, #0
 	clr Say_Soak_flag
+	clr Speakflag
 Soak_State1_done:
 	ret
 
@@ -406,6 +411,7 @@ Say_RamptoReflow:
 RamptoReflow_State0: ; Play first word
 	cjne a, #0, RamptoReflow_State1
 	jnb Say_RamptoReflow_flag, Say_RamptoReflow_done
+	setb Speakflag
 	clr c
 	mov a, #28
   lcall Play_Sound_Using_Index ; "Ramp"
@@ -446,6 +452,7 @@ RamptoReflow_State5: ; Wait for third word to finish playing
 	jb TMOD20, RamptoReflow_State5_done
 	clr Say_RamptoReflow_flag
 	mov RamptoReflow_State, #0
+	clr Speakflag
 RamptoReflow_State5_done:
 	ret
 
@@ -462,6 +469,7 @@ Say_Reflow:
 Reflow_State0: ; Play first word
 	cjne a, #0, Reflow_State1
 	jnb Say_Reflow_flag, Say_Reflow_done
+	setb Speakflag
 	clr c
 	mov a, #31
   lcall Play_Sound_Using_Index ; "Reflow"
@@ -474,6 +482,7 @@ Reflow_State1: ; Wait for first word to finish playing
 	jb TMOD20, Reflow_State1_done
 	mov Reflow_State, #0
 	clr Say_Reflow_flag
+	clr Speakflag
 Reflow_State1_done:
 	ret
 
@@ -488,6 +497,7 @@ Say_Cooling:
 Cooling_State0: ; Play first word
 	cjne a, #0, Cooling_State1
 	jnb Say_Cooling_flag, Say_Cooling_done
+	setb Speakflag
 	clr c
 	mov a, #32
   lcall Play_Sound_Using_Index ; "Cooling"
@@ -500,6 +510,7 @@ Cooling_State1: ; Wait for first word to finish playing
 	jb TMOD20, Cooling_State1_done
 	mov Cooling_State, #0
 	clr Say_Cooling_flag
+	clr Speakflag
 Cooling_State1_done:
 	ret
 
@@ -514,6 +525,7 @@ Say_AbortingProcess:
 AbortingProcess_State0: ; Play first word
 	cjne a, #0, AbortingProcess_State1
 	jnb Say_AbortingProcess_flag, Say_AbortingProcess_done
+	setb Speakflag
 	clr c
 	mov a, #49
   lcall Play_Sound_Using_Index ; "Aborting"
@@ -540,6 +552,7 @@ AbortingProcess_State3: ; Wait for second word to finish playing
 	jb TMOD20, AbortingProcess_State3_done
 	mov AbortingProcess_State, #0
 	clr Say_AbortingProcess_flag
+	clr Speakflag
 AbortingProcess_State3_done:
 	ret
 
@@ -555,6 +568,7 @@ Say_Ding:
 Ding_State0: ; Play first word
 	cjne a, #0, Ding_State1
 	jnb Say_Ding_flag, Say_Ding_done
+	setb Speakflag
 	clr c
 	mov a, #37
   lcall Play_Sound_Using_Index ; "Ding"
@@ -567,6 +581,7 @@ Ding_State1: ; Wait for first word to finish playing
 	jb TMOD20, Ding_State1_done
 	mov Ding_State, #0
 	clr Say_Ding_flag
+	clr Speakflag
 Ding_State1_done:
 	ret
 
@@ -582,6 +597,7 @@ Say_SolderingProcessComplete:
 SolderingProcessComplete_State0: ; Play first word
 	cjne a, #0, SolderingProcessComplete_State1
 	jnb Say_SolderingProcessComplete_flag, Say_SolderingProcessComplete_done
+	setb Speakflag
 	clr c
 	mov a, #38
   lcall Play_Sound_Using_Index ; "Soldering"
@@ -622,6 +638,7 @@ SolderingProcessComplete_State5: ; Wait for third word to finish playing
 	jb TMOD20, SolderingProcessComplete_State5_done
 	clr Say_SolderingProcessComplete_flag
 	mov SolderingProcessComplete_State, #0
+	clr Speakflag
 SolderingProcessComplete_State5_done:
 	ret
 
