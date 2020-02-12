@@ -93,6 +93,7 @@ Cooling_State: ds 1
 Ding_State: ds 1
 AbortingProcess_State: ds 1
 SolderingProcessComplete_State: ds 1
+remainder: ds 1
 w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 ;soak_time_total: ds 1
 ;reflow_time_total: ds 1
@@ -180,6 +181,7 @@ $LIST
 ; The 8-bit hex number passed in the accumulator is converted to
 ; BCD and stored in [R1, R0]
 Hex_to_bcd_8bit:
+;  push b
 	mov b, #100
 	div ab
 	mov R1, a   ; After dividing, a has the 100s
@@ -190,6 +192,7 @@ Hex_to_bcd_8bit:
 	anl a, #0xf0
 	orl a, b
 	mov R0, a
+;  pop b
 	ret
 
   Send_Lower_BCD mac
@@ -353,6 +356,7 @@ Hex_to_bcd_8bit:
 Get_Temp:
     ;mov current_temp, LM335_ADC_REGISTER
     ; First get cold junction temp from LM335
+    ; jb Speakflag, Get_temp_done
     mov x+0, LM335_ADC_REGISTER
     clr a
     mov x+1, a
@@ -373,6 +377,7 @@ Get_Temp:
     ; Thermocouple temp is now in y
     lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
     mov current_temp, x ; actual thermocouple temp is now in current_temp
+;Get_temp_done:
     ret
 
 send_putty:
@@ -562,7 +567,8 @@ main:
     mov BFSM6_timer, a
     mov BFSM7_timer, a
     mov current_temp, a
-    clr speakflag
+    push b
+    clr Speakflag
     Load_X(0)
     Load_y(0)
 
@@ -598,11 +604,13 @@ start1:
     mov Ding_State, #0
     setb Say_SolderingProcessComplete_flag
     mov SolderingProcessComplete_State, #0
-
+    clr SOUND
 loop:
     ; start of the state machine
     ; clr SOUND
+    pop b
     lcall T2S_FSM
+    push b
     lcall Check_Buttons
     lcall Get_Temp
 FSM_RESET:
@@ -613,7 +621,7 @@ FSM_RESET:
     ljmp FSM_RAMP_TO_SOAK ; jump to next state check if state decider doesn't match
 RESET_continue1:
     mov PWM_Duty_Cycle255, #0
-    clr T2S_FSM_start
+    setb Speakflag
     clr B3_flag_bit
     clr B4_flag_bit
     clr B5_flag_bit
@@ -643,6 +651,7 @@ RESET_check_start_button:
     mov seconds_total, a
     mov minutes_total, a
     setb seconds_flag
+    clr Speakflag
     Display_init_main_screen(display_mode_ramp1)
 
 FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
@@ -865,7 +874,6 @@ COOLDOWN_continue1:
     Display_update_temperature(current_temp)
 skip_display6:
     mov PWM_Duty_Cycle255, #0 ; Shut off oven
-    lcall Say_Ding
   ;  lcall Say_SolderingProcessComplete
     ; Wait for temperature to decrease to a safe level before going to standby/reset
     load_y(50)
@@ -874,6 +882,7 @@ skip_display6:
     mov FSM_state_decider, #STATE_RESET
     setb seconds_flag
     lcall Display_init_standby_screen
+    ;lcall Say_Ding
     ljmp start1
 
 FSM_SET_SOAK:
@@ -883,7 +892,7 @@ FSM_SET_SOAK:
     jz SET_SOAK_continue1
     ljmp FSM_SET_REFLOW
 SET_SOAK_continue1:
-    clr SOUND
+
     clr B7_flag_bit ; unused button,
     ; Check cancel button and return to reset if pressed
     jnb B1_flag_bit, SET_SOAK_continue2
@@ -922,6 +931,7 @@ SET_SOAK_continue6:
     jnb B6_flag_bit, SET_SOAK_continue7
     clr B6_flag_bit
     inc soak_temp
+
     ljmp SET_SOAK_continue7
 SET_SOAK_continue7:
     Display_update_set_screen(soak_time_seconds, soak_time_minutes, soak_temp)

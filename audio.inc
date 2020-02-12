@@ -173,6 +173,7 @@ T2S_FSM_State0: ; Checks for the start signal (T2S_FSM_Start==1) "T2S_FSM_Start=
 	cjne a, #0, T2S_FSM_State1
 	jnb T2S_FSM_Start, T2S_FSM_State0_Done
 	jb Speakflag, T2S_FSM_State0_Done
+	setb Speakflag
 	; Check if current_temp is larger than 19
 	clr c
 	mov a, current_temp
@@ -271,6 +272,7 @@ T2S_FSM_State9: ; Stay in this state until sound finishes playing
 	jb TMOD20, T2S_FSM_State9_Done
 	clr T2S_FSM_Start
 	mov T2S_FSM_State, #0
+	clr Speakflag
 T2S_FSM_State9_Done:
 	ret
 
@@ -290,7 +292,7 @@ T2S_FSM_State11_Done:
 
 T2S_FSM_State15: ; Plays current_temp when current_temp is less than 20
 	cjne a, #15, T2S_FSM_State16
-	mov a, r6
+	mov a, remainder
 	subb a, #1 ;each index is 1 less than what is wants to say
 	lcall Play_Sound_Using_Index
 	mov T2S_FSM_State, #16
@@ -325,6 +327,7 @@ Say_RamptoSoak:
 RamptoSoak_State0: ; Play first word
 	cjne a, #0, RamptoSoak_State1
 	jnb Say_RamptoSoak_flag, Say_RamptoSoak_done
+	jb Speakflag, Say_RamptoSoak_done
 	setb Speakflag
 	clr c
 	mov a, #28
@@ -382,6 +385,7 @@ Say_Soak:
 Soak_State0: ; Play first word
 	cjne a, #0, Soak_State1
 	jnb Say_Soak_flag, Say_Soak_done
+	jb Speakflag, Say_Soak_done
 	setb Speakflag
 	clr c
 	mov a, #30
@@ -411,6 +415,7 @@ Say_RamptoReflow:
 RamptoReflow_State0: ; Play first word
 	cjne a, #0, RamptoReflow_State1
 	jnb Say_RamptoReflow_flag, Say_RamptoReflow_done
+	jb Speakflag, Say_RamptoReflow_done
 	setb Speakflag
 	clr c
 	mov a, #28
@@ -469,6 +474,7 @@ Say_Reflow:
 Reflow_State0: ; Play first word
 	cjne a, #0, Reflow_State1
 	jnb Say_Reflow_flag, Say_Reflow_done
+	jb Speakflag, Say_Reflow_done
 	setb Speakflag
 	clr c
 	mov a, #31
@@ -497,6 +503,7 @@ Say_Cooling:
 Cooling_State0: ; Play first word
 	cjne a, #0, Cooling_State1
 	jnb Say_Cooling_flag, Say_Cooling_done
+	jb Speakflag, Say_Cooling_done
 	setb Speakflag
 	clr c
 	mov a, #32
@@ -525,6 +532,7 @@ Say_AbortingProcess:
 AbortingProcess_State0: ; Play first word
 	cjne a, #0, AbortingProcess_State1
 	jnb Say_AbortingProcess_flag, Say_AbortingProcess_done
+	jb Speakflag, Say_AbortingProcess_done
 	setb Speakflag
 	clr c
 	mov a, #49
@@ -568,6 +576,7 @@ Say_Ding:
 Ding_State0: ; Play first word
 	cjne a, #0, Ding_State1
 	jnb Say_Ding_flag, Say_Ding_done
+	jb Speakflag, Say_Ding_done
 	setb Speakflag
 	clr c
 	mov a, #37
