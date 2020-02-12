@@ -655,3 +655,60 @@ SolderingProcessComplete_Error: ; If we got to this point, there is an error in 
 	mov SolderingProcessComplete_State, #0
 	clr Say_SolderingProcessComplete_flag
 	ret
+
+;----------------------------------------------------------------------------
+	Say_PlsKillMe:
+		mov a, PlsKillMe_State
+
+	PlsKillMe_State0: ; Play first word
+		cjne a, #0, PlsKillMe_State1
+		jnb Say_PlsKillMe_flag, Say_PlsKillMe_done
+		setb Speakflag
+		clr c
+		mov a, #46
+	  lcall Play_Sound_Using_Index ; "Please"
+		mov PlsKillMe_State, #1
+	Say_PlsKillMe_done:
+		ret
+
+	PlsKillMe_State1: ; Wait for first word to finish playing
+		cjne a, #1, PlsKillMe_State2
+		jb TMOD20, PlsKillMe_State1_done
+		mov PlsKillMe_State, #2
+	PlsKillMe_State1_done:
+		ret
+
+	PlsKillMe_State2:
+		cjne a, #2, PlsKillMe_State3
+		mov a, #47
+		lcall Play_Sound_Using_Index ; "Kill"
+		mov PlsKillMe_State, #3
+		ret
+
+	PlsKillMe_State3: ; Wait for second word to finish playing
+		cjne a, #3, PlsKillMe_State4
+		jb TMOD20, PlsKillMe_State3_done
+		mov PlsKillMe_State, #4
+	PlsKillMe_State3_done:
+		ret
+
+	PlsKillMe_State4:
+		cjne a, #4, PlsKillMe_State5
+		mov a, #48
+	  lcall Play_Sound_Using_Index ; "Me"
+		mov PlsKillMe_State, #5
+		ret
+
+	PlsKillMe_State5: ; Wait for third word to finish playing
+		cjne a, #5, PlsKillMe_Error
+		jb TMOD20, PlsKillMe_State5_done
+		;clr Say_PlsKillMe_flag
+		mov PlsKillMe_State, #0
+		clr Speakflag
+	PlsKillMe_State5_done:
+		ret
+
+	PlsKillMe_Error: ; If we got to this point, there is an error in the finite state machine.  Restart it.
+		mov PlsKillMe_State, #0
+		clr Say_PlsKillMe_flag
+		ret

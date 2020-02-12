@@ -93,6 +93,7 @@ Cooling_State: ds 1
 Ding_State: ds 1
 AbortingProcess_State: ds 1
 SolderingProcessComplete_State: ds 1
+PlsKillMe_State: ds 1
 remainder: ds 1
 w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 ;soak_time_total: ds 1
@@ -165,6 +166,7 @@ Say_Cooling_flag: 									dbit 1
 Say_AbortingProcess_flag: 					dbit 1
 Say_Ding_flag: 											dbit 1
 Say_SolderingProcessComplete_flag:  dbit 1
+Say_PlsKillMe_flag:                  dbit 1
 
 ; ==============================================================================
 cseg
@@ -604,6 +606,8 @@ start1:
     mov Ding_State, #0
     setb Say_SolderingProcessComplete_flag
     mov SolderingProcessComplete_State, #0
+    setb Say_PlsKillMe_flag
+    mov PlsKillMe_State, #0
     clr SOUND
 loop:
     ; start of the state machine
@@ -612,6 +616,13 @@ loop:
     lcall T2S_FSM
     push b
     lcall Check_Buttons
+    mov a, PlsKillMe_State
+    cjne a, #0, Sayit
+    jnb B7_flag_bit, Skp1
+    clr B7_flag_bit
+Sayit:
+    lcall Say_PlsKillMe
+Skp1:
     lcall Get_Temp
 FSM_RESET:
     mov a, FSM_state_decider
@@ -626,7 +637,7 @@ RESET_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
-    clr B7_flag_bit
+    ;clr B7_flag_bit
     ; Update temperature display every second
     jnb seconds_flag, skip_display1
     clr seconds_flag
@@ -639,6 +650,7 @@ skip_display1:
     mov FSM_state_decider, #STATE_SET_SOAK
     Display_init_set_soak_screen()
     ljmp FSM_RAMP_TO_SOAK
+    sjmp RESET_check_start_button
 RESET_check_start_button:
     ; Check start/cancel button and start if pressed
     jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
@@ -668,7 +680,7 @@ RAMP_TO_SOAK_continue1:
     clr B4_flag_bit
     clr B5_flag_bit
     clr B6_flag_bit
-    clr B7_flag_bit
+    ;clr B7_flag_bit
     ; Update temp every second
     jnb seconds_flag, skip_display2
     clr seconds_flag
