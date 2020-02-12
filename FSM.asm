@@ -26,6 +26,9 @@ CCU_RELOAD  EQU ((65536-((XTAL/(2*CCU_RATE)))))
 BAUD EQU 115200
 BRVAL EQU ((XTAL/BAUD)-16)
 
+PWM_STEADY_OFFSET equ 51 ; Temperature PWM offset (steady state PWM value)
+KP equ 5 ; Proportional control constant
+
 ; Pin Assignments
 LCD_RS equ P0.5
 LCD_RW equ P0.6
@@ -39,7 +42,7 @@ THERMOCOUPLE_ADC_REGISTER equ AD0DAT1 ; on P0.0
 LM335_ADC_REGISTER equ AD0DAT0 ; on pin P1.7
 BUTTONS_ADC_REGISTER equ AD0DAT2 ; on pin P2.0
 ; The last ADC channel's reading is in ADC0DAT (from pin P2.1)
-; soundinit.inc buttons
+; soundinit.inc
 FLASH_CE    EQU P2.4
 SOUND       EQU P2.7
 
@@ -99,6 +102,7 @@ w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 current_temp: ds 1
 current_temp32: ds 4
 cold_junc_temp32: ds 4
+target_temp: ds 1
 ; Temperature profile parameters
 soak_temp: ds 1
 soak_time_seconds: ds 1
@@ -194,164 +198,118 @@ Hex_to_bcd_8bit:
 	mov R0, a
 	ret
 
-  Send_Lower_BCD mac
-    	push ar0
-    	mov r0, %0
-    	lcall ?Send_Lower_BCD
-    	pop ar0
-    endmac
-
-    ?Send_Lower_BCD:
-    	push acc
-    	; write only the least significant digit
-    	mov a, r0
-    	anl a, #0fh
-    	orl a, #30h
-    	lcall putchar
-    	pop acc
-    	ret
-
-    Send_Upper_BCD mac
-    	push ar0
-    	mov r0, %0
-    	lcall ?Send_Upper_BCD
-    	pop ar0
-    endmac
-
-    ?Send_Upper_BCD:
-    	push acc
-    	; write only the most significant digit
-    	mov a, r0
-    	anl a, #0f0h
-    	swap a
-    	orl a, #30h
-    	lcall putchar
-    	pop acc
-    	ret
-
-  Send_BCD mac
-  	push ar0
-  	mov r0, %0
-  	lcall ?Send_BCD
-  	pop ar0
-  endmac
-
-  ?Send_BCD:
-  	lcall ?Send_Upper_BCD
-  	; write least significant digit
-  	lcall ?Send_Lower_BCD
-  	ret
     ; ; Approximate index of sounds in file 'Project1Sounds.wav'
-    sound_index:
-        db 0x00, 0x00, 0x2b ; 0
-        db 0x00, 0x26, 0xc0 ; 1
-        db 0x00, 0x4f, 0xea ; 2
-        db 0x00, 0x7d, 0xe5 ; 3
-        db 0x00, 0xb6, 0x58 ; 4
-        db 0x00, 0xec, 0x17 ; 5
-        db 0x01, 0x2c, 0x1c ; 6
-        db 0x01, 0x63, 0x25 ; 7
-        db 0x01, 0x8f, 0x85 ; 8
-        db 0x01, 0xc7, 0x20 ; 9
-        db 0x02, 0x02, 0x56 ; 10
-        db 0x02, 0x41, 0x0d ; 11
-        db 0x02, 0x7c, 0x5e ; 12
-        db 0x02, 0xbd, 0xe4 ; 13
-        db 0x03, 0x0b, 0xea ; 14
-        db 0x03, 0x4d, 0x6d ; 15
-        db 0x03, 0x98, 0xaa ; 16
-        db 0x03, 0xed, 0x93 ; 17
-        db 0x04, 0x33, 0xa0 ; 18
-        db 0x04, 0x86, 0xd8 ; 19
-        db 0x04, 0xd2, 0x88 ; 20
-        db 0x05, 0x0c, 0x03 ; 21
-        db 0x05, 0x4b, 0x73 ; 22
-        db 0x05, 0x8a, 0xbc ; 23
-        db 0x05, 0xd0, 0x2a ; 24
-        db 0x06, 0x13, 0x3f ; 25
-        db 0x06, 0x42, 0x0f ; 26
-        db 0x06, 0x7e, 0xa9 ; 27
-        db 0x06, 0xbb, 0x20 ; 28
-        db 0x06, 0xef, 0x15 ; 29
-        db 0x07, 0x19, 0x31 ; 30
-        db 0x07, 0x51, 0x7c ; 31
-        db 0x07, 0x93, 0x94 ; 32
-        db 0x07, 0xce, 0x4e ; 33
-        db 0x08, 0x0a, 0x56 ; 34
-        db 0x08, 0x4d, 0x94 ; 35
-        db 0x08, 0x92, 0x50 ; 36
-        db 0x08, 0xcc, 0x77 ; 37
-        db 0x08, 0xf6, 0x71 ; 38
-        db 0x09, 0x35, 0x97 ; 39
-        db 0x09, 0x77, 0xb6 ; 40
-        db 0x09, 0xa8, 0xb0 ; 41
-        db 0x09, 0xea, 0xff ; 42
-        db 0x0a, 0x0e, 0x6a ; 43
-        db 0x0a, 0x36, 0xc4 ; 44
-        db 0x0a, 0x6f, 0x37 ; 45
-        db 0x0a, 0x8e, 0xfe ; 46
-        db 0x0a, 0xb8, 0xc4 ; 47
-        db 0x0a, 0xd9, 0xbc ; 48
-        db 0x0a, 0xf9, 0xe7 ; 49
-        db 0x0b, 0x31, 0xe8 ; 50
-        db 0x0b, 0x63, 0xee ; 51
-        db 0x0b, 0xb3, 0x56
+sound_index:
+    db 0x00, 0x00, 0x2b ; 0
+    db 0x00, 0x26, 0xc0 ; 1
+    db 0x00, 0x4f, 0xea ; 2
+    db 0x00, 0x7d, 0xe5 ; 3
+    db 0x00, 0xb6, 0x58 ; 4
+    db 0x00, 0xec, 0x17 ; 5
+    db 0x01, 0x2c, 0x1c ; 6
+    db 0x01, 0x63, 0x25 ; 7
+    db 0x01, 0x8f, 0x85 ; 8
+    db 0x01, 0xc7, 0x20 ; 9
+    db 0x02, 0x02, 0x56 ; 10
+    db 0x02, 0x41, 0x0d ; 11
+    db 0x02, 0x7c, 0x5e ; 12
+    db 0x02, 0xbd, 0xe4 ; 13
+    db 0x03, 0x0b, 0xea ; 14
+    db 0x03, 0x4d, 0x6d ; 15
+    db 0x03, 0x98, 0xaa ; 16
+    db 0x03, 0xed, 0x93 ; 17
+    db 0x04, 0x33, 0xa0 ; 18
+    db 0x04, 0x86, 0xd8 ; 19
+    db 0x04, 0xd2, 0x88 ; 20
+    db 0x05, 0x0c, 0x03 ; 21
+    db 0x05, 0x4b, 0x73 ; 22
+    db 0x05, 0x8a, 0xbc ; 23
+    db 0x05, 0xd0, 0x2a ; 24
+    db 0x06, 0x13, 0x3f ; 25
+    db 0x06, 0x42, 0x0f ; 26
+    db 0x06, 0x7e, 0xa9 ; 27
+    db 0x06, 0xbb, 0x20 ; 28
+    db 0x06, 0xef, 0x15 ; 29
+    db 0x07, 0x19, 0x31 ; 30
+    db 0x07, 0x51, 0x7c ; 31
+    db 0x07, 0x93, 0x94 ; 32
+    db 0x07, 0xce, 0x4e ; 33
+    db 0x08, 0x0a, 0x56 ; 34
+    db 0x08, 0x4d, 0x94 ; 35
+    db 0x08, 0x92, 0x50 ; 36
+    db 0x08, 0xcc, 0x77 ; 37
+    db 0x08, 0xf6, 0x71 ; 38
+    db 0x09, 0x35, 0x97 ; 39
+    db 0x09, 0x77, 0xb6 ; 40
+    db 0x09, 0xa8, 0xb0 ; 41
+    db 0x09, 0xea, 0xff ; 42
+    db 0x0a, 0x0e, 0x6a ; 43
+    db 0x0a, 0x36, 0xc4 ; 44
+    db 0x0a, 0x6f, 0x37 ; 45
+    db 0x0a, 0x8e, 0xfe ; 46
+    db 0x0a, 0xb8, 0xc4 ; 47
+    db 0x0a, 0xd9, 0xbc ; 48
+    db 0x0a, 0xf9, 0xe7 ; 49
+    db 0x0b, 0x31, 0xe8 ; 50
+    db 0x0b, 0x63, 0xee ; 51
+    db 0x0b, 0xb3, 0x56
 
-    ; Size of each sound in 'sound_index'
-    Size_Length:
-        db 0x00, 0x26, 0x95 ; 0 = '1'
-        db 0x00, 0x29, 0x2a ; 1 = '2'
-        db 0x00, 0x2d, 0xfb ; 2 = '3'
-        db 0x00, 0x38, 0x73 ; 3 = '4'
-        db 0x00, 0x35, 0xbf ; 4 = '5'
-        db 0x00, 0x40, 0x05 ; 5 = '6'
-        db 0x00, 0x37, 0x09 ; 6 = '7'
-        db 0x00, 0x2c, 0x60 ; 7 = '8'
-        db 0x00, 0x37, 0x9b ; 8 = '9'
-        db 0x00, 0x3b, 0x36 ; 9 = '10'
-        db 0x00, 0x3e, 0xb7 ; 10 = '11'
-        db 0x00, 0x3b, 0x51 ; 11 = '12'
-        db 0x00, 0x41, 0x86 ; 12 = '13'
-        db 0x00, 0x4e, 0x06 ; 13 = '14'
-        db 0x00, 0x41, 0x83 ; 14 = '15'
-        db 0x00, 0x4b, 0x3d ; 15 = '16'
-        db 0x00, 0x54, 0xe9 ; 16 = '17'
-        db 0x00, 0x46, 0x0d ; 17 = '18'
-        db 0x00, 0x53, 0x38 ; 18 = '19'
-        db 0x00, 0x4b, 0xb0 ; 19 = '20'
-        db 0x00, 0x39, 0x7b ; 20 = '30'
-        db 0x00, 0x3f, 0x70 ; 21 = '40'
-        db 0x00, 0x3f, 0x49 ; 22 = '50'
-        db 0x00, 0x45, 0x6e ; 23 = '60'
-        db 0x00, 0x43, 0x15 ; 24 = '70'
-        db 0x00, 0x2e, 0xd0 ; 25 = '80'
-        db 0x00, 0x3c, 0x9a ; 26 = '90'
-        db 0x00, 0x3c, 0x77 ; 27 = 'hundred'
-        db 0x00, 0x33, 0xf5 ; 28 = 'ramp'
-        db 0x00, 0x2a, 0x1c ; 29 = 'to'
-        db 0x00, 0x38, 0x4b ; 30 = 'soak'
-        db 0x00, 0x42, 0x18 ; 31 = 'reflow'
-        db 0x00, 0x3a, 0xba ; 32 = 'cooling'
-        db 0x00, 0x3c, 0x08 ; 33 = 'stage'
-        db 0x00, 0x43, 0x3e ; 34 = 'seconds'
-        db 0x00, 0x44, 0xbc ; 35 = 'celsius'
-        db 0x00, 0x3a, 0x27 ; 36 = 'current_temp'
-        db 0x00, 0x29, 0xfa ; 37 = 'ding'
-        db 0x00, 0x3f, 0x26 ; 38 = 'soldering'
-        db 0x00, 0x42, 0x1f ; 39 = 'complete'
-        db 0x00, 0x30, 0xfa ; 40 = 'oven'
-        db 0x00, 0x42, 0x4f ; 41 = 'temperature'
-        db 0x00, 0x23, 0x6b ; 42 = 'is'
-        db 0x00, 0x28, 0x5a ; 43 = 'time'
-        db 0x00, 0x38, 0x73 ; 44 = 'remaining'
-        db 0x00, 0x1f, 0xc7 ; 45 = 'in'
-        db 0x00, 0x29, 0xc6 ; 46 = 'please'
-        db 0x00, 0x20, 0xf8 ; 47 = 'kill'
-        db 0x00, 0x20, 0x2b ; 48 = 'me'
-        db 0x00, 0x38, 0x01 ; 49 = 'aborting'
-        db 0x00, 0x32, 0x06 ; 50 = 'process'
-        db 0x00, 0x4f, 0x68 ; 51 = 'switch'
+; Size of each sound in 'sound_index'
+Size_Length:
+    db 0x00, 0x26, 0x95 ; 0 = '1'
+    db 0x00, 0x29, 0x2a ; 1 = '2'
+    db 0x00, 0x2d, 0xfb ; 2 = '3'
+    db 0x00, 0x38, 0x73 ; 3 = '4'
+    db 0x00, 0x35, 0xbf ; 4 = '5'
+    db 0x00, 0x40, 0x05 ; 5 = '6'
+    db 0x00, 0x37, 0x09 ; 6 = '7'
+    db 0x00, 0x2c, 0x60 ; 7 = '8'
+    db 0x00, 0x37, 0x9b ; 8 = '9'
+    db 0x00, 0x3b, 0x36 ; 9 = '10'
+    db 0x00, 0x3e, 0xb7 ; 10 = '11'
+    db 0x00, 0x3b, 0x51 ; 11 = '12'
+    db 0x00, 0x41, 0x86 ; 12 = '13'
+    db 0x00, 0x4e, 0x06 ; 13 = '14'
+    db 0x00, 0x41, 0x83 ; 14 = '15'
+    db 0x00, 0x4b, 0x3d ; 15 = '16'
+    db 0x00, 0x54, 0xe9 ; 16 = '17'
+    db 0x00, 0x46, 0x0d ; 17 = '18'
+    db 0x00, 0x53, 0x38 ; 18 = '19'
+    db 0x00, 0x4b, 0xb0 ; 19 = '20'
+    db 0x00, 0x39, 0x7b ; 20 = '30'
+    db 0x00, 0x3f, 0x70 ; 21 = '40'
+    db 0x00, 0x3f, 0x49 ; 22 = '50'
+    db 0x00, 0x45, 0x6e ; 23 = '60'
+    db 0x00, 0x43, 0x15 ; 24 = '70'
+    db 0x00, 0x2e, 0xd0 ; 25 = '80'
+    db 0x00, 0x3c, 0x9a ; 26 = '90'
+    db 0x00, 0x3c, 0x77 ; 27 = 'hundred'
+    db 0x00, 0x33, 0xf5 ; 28 = 'ramp'
+    db 0x00, 0x2a, 0x1c ; 29 = 'to'
+    db 0x00, 0x38, 0x4b ; 30 = 'soak'
+    db 0x00, 0x42, 0x18 ; 31 = 'reflow'
+    db 0x00, 0x3a, 0xba ; 32 = 'cooling'
+    db 0x00, 0x3c, 0x08 ; 33 = 'stage'
+    db 0x00, 0x43, 0x3e ; 34 = 'seconds'
+    db 0x00, 0x44, 0xbc ; 35 = 'celsius'
+    db 0x00, 0x3a, 0x27 ; 36 = 'current_temp'
+    db 0x00, 0x29, 0xfa ; 37 = 'ding'
+    db 0x00, 0x3f, 0x26 ; 38 = 'soldering'
+    db 0x00, 0x42, 0x1f ; 39 = 'complete'
+    db 0x00, 0x30, 0xfa ; 40 = 'oven'
+    db 0x00, 0x42, 0x4f ; 41 = 'temperature'
+    db 0x00, 0x23, 0x6b ; 42 = 'is'
+    db 0x00, 0x28, 0x5a ; 43 = 'time'
+    db 0x00, 0x38, 0x73 ; 44 = 'remaining'
+    db 0x00, 0x1f, 0xc7 ; 45 = 'in'
+    db 0x00, 0x29, 0xc6 ; 46 = 'please'
+    db 0x00, 0x20, 0xf8 ; 47 = 'kill'
+    db 0x00, 0x20, 0x2b ; 48 = 'me'
+    db 0x00, 0x38, 0x01 ; 49 = 'aborting'
+    db 0x00, 0x32, 0x06 ; 50 = 'process'
+    db 0x00, 0x4f, 0x68 ; 51 = 'switch'
 
+; TEMPERATURE ==================================================================
 Wait10us:
     ; For ADC decimation
     mov R0, #36
@@ -360,6 +318,31 @@ Wait10us:
 
 ; Returns temperature at thermocouple in register a
 Get_Temp:
+    ; ;mov current_temp, LM335_ADC_REGISTER
+    ; ; First get cold junction temp from LM335
+    ; mov x+0, LM335_ADC_REGISTER
+    ; clr a
+    ; mov x+1, a
+    ; mov x+2, a
+    ; mov x+3, a
+    ; Load_y(330)
+    ; lcall mul32
+    ; Load_y(255)
+    ; lcall div32
+    ; Load_y(273)
+    ; lcall sub32
+    ; ; Cold-junction temp is now in x
+    ; clr a
+    ; mov y+1, a
+    ; mov y+2, a
+    ; mov y+3, a
+    ; mov y+0, THERMOCOUPLE_ADC_REGISTER
+    ; ; Thermocouple temp is now in y
+    ; lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
+    ; mov current_temp, x ; actual thermocouple temp is now in current_temp
+    ; ret
+
+    ; New routine.....
     push ar7
     ; First get cold junction temp from LM335
     ; Take 256 (4^4) consecutive measurements of ADC0 channel 0 at about 10 us intervals and accumulate in x
@@ -424,25 +407,77 @@ Get_Temp_loop2:
     load_y(100) ; divide it down to an 8-bit value
     lcall div32
     mov current_temp, x+0
+    ; this value must be in x as well since main FSM assumes current temp is in x
+    mov x+1, #0
+    mov x+2, #0
+    mov x+3, #0
     pop ar7
     ret
 
-send_putty:
-    mov x+0, current_temp32+0
-    mov x+1, current_temp32+1
-    mov x+2, current_temp32+2
-    mov x+3, current_temp32+3
-    lcall hex2bcd
-    Send_BCD(bcd+3)
-    Send_BCD(bcd+2)
-    Send_BCD(bcd+1)
-    mov a, #'.'
-    lcall putchar
-    Send_BCD(bcd+0)
-    mov a, #'\r'
-    lcall putchar
-    mov a, #'\n'
-    lcall putchar
+Control_Temp:
+    ; Proportional (P of PID) Control for temperature
+    ; Sets the PWM depending on the difference of the oven temperature and the
+    ; target temperature
+    ; Safeguard: set PWM to 0 if target temp is zero
+    mov a, target_temp
+    jnz Control_temp_nonzero
+    mov PWM_Duty_Cycle255, #0
+    ret
+Control_temp_nonzero:
+    ; Get difference target - oven temp
+    clr c
+    subb a, current_temp
+    ; If the oven temperature is greater than the target, the result is negative
+    jc oven_over_target ; jump if the number is negative
+    ; Need to heat up
+    ; Figure out how high to set PWM - difference is in a
+    ; Multiply the difference by KP (PWM steps per degree temp difference)
+    mov x+0, a
+    mov x+1, #0
+    mov x+2, #0
+    mov x+3, #0
+    Load_Y(KP)
+    lcall mul32
+    ; Add the offset to keep the temperature more stable
+    Load_y(PWM_STEADY_OFFSET)
+    lcall add32
+    ; Limit the max to 255 (check if product is >255)
+    Load_Y(255)
+    lcall x_gteq_y
+    jnb mf, Control_temp_limit1_done
+    mov PWM_Duty_Cycle255, #255
+    ret
+Control_temp_limit1_done:
+    mov PWM_Duty_Cycle255, x+0
+    ret
+oven_over_target:
+    ; Need to cool down
+    ; Take two's complement of the result of the subtraction
+    cpl a
+    inc a
+    mov x+0, a
+    mov x+1, #0
+    mov x+2, #0
+    mov x+3, #0
+    Load_Y(KP)
+    lcall mul32
+    mov a, x+0
+    push acc
+    ; Check if the product is less than PWM_STEADY_OFFSET
+    Load_Y(PWM_STEADY_OFFSET)
+    lcall x_lt_y
+    jb mf, Control_temp_limit2_done
+    mov PWM_Duty_Cycle255, #0
+    pop acc
+    ret
+Control_temp_limit2_done:
+    ; The PWM change is less than the offset, so subtract the change from the offset
+    pop acc
+    mov b, a
+    mov a, #PWM_STEADY_OFFSET
+    clr c
+    subb a, b
+    mov PWM_Duty_Cycle255, a
     ret
 
 ; SPI ==========================================================================
@@ -488,7 +523,90 @@ getchar:
 	jnb RI, getchar
 	clr RI
 	mov a, SBUF
+    ret
+
+Send_Lower_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_Lower_BCD
+	pop ar0
+endmac
+
+?Send_Lower_BCD:
+	push acc
+	; write only the least significant digit
+	mov a, r0
+	anl a, #0fh
+	orl a, #30h
+	lcall putchar
+	pop acc
 	ret
+
+Send_Upper_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_Upper_BCD
+	pop ar0
+endmac
+
+?Send_Upper_BCD:
+	push acc
+	; write only the most significant digit
+	mov a, r0
+	anl a, #0f0h
+	swap a
+	orl a, #30h
+	lcall putchar
+	pop acc
+	ret
+
+Send_BCD mac
+	push ar0
+	mov r0, %0
+	lcall ?Send_BCD
+	pop ar0
+endmac
+
+?Send_BCD:
+	lcall ?Send_Upper_BCD
+	; write least significant digit
+	lcall ?Send_Lower_BCD
+	ret
+
+send_putty:
+    mov x+0, current_temp32+0
+    mov x+1, current_temp32+1
+    mov x+2, current_temp32+2
+    mov x+3, current_temp32+3
+    lcall hex2bcd
+    Send_BCD(bcd+3)
+    Send_BCD(bcd+2)
+    Send_BCD(bcd+1)
+    mov a, #'.'
+    lcall putchar
+    Send_BCD(bcd+0)
+    ; FOR DEBUGGING - send PWM value
+    mov a, #' '
+    lcall putchar
+    mov a, PWM_Duty_Cycle255
+    lcall Hex_to_bcd_8bit
+    Send_BCD(ar1)
+    Send_BCD(ar0)
+    mov a, #'\r'
+    lcall putchar
+    mov a, #'\n'
+    lcall putchar
+    ret
+    ; ; old routine....
+    ; mov a, current_temp
+    ; lcall Hex_to_bcd_8bit
+    ; Send_Lower_BCD(ar1)
+    ; Send_BCD(ar0)
+    ; mov a, #'\r'
+    ; lcall putchar
+    ; mov a, #'\n'
+    ; lcall putchar
+    ; ret
 
 ; BUTTONS ======================================================================
 Check_Buttons: ; Checks to see if we pressed any buttons
@@ -589,7 +707,7 @@ main:
     clr TMOD20
     setb EA ; Enable Global interrupts
     ; lcall phython program
-    lcall SendString ; send the temperature through the SPI
+    ;lcall SendString ; send the temperature through the SPI
 
     ; Initialize variables
     clr B1_flag_bit
@@ -633,9 +751,18 @@ main:
     mov reflow_time_seconds, #40
     mov reflow_time_minutes, #0
 
-	; After initialization the program stays in this 'forever' loop
     mov FSM_state_decider, #0
     mov PWM_Duty_Cycle255, #0
+    mov current_temp32+0, #0
+    mov current_temp32+1, #0
+    mov current_temp32+2, #0
+    mov current_temp32+3, #0
+    mov cold_junc_temp32+0, #0
+    mov cold_junc_temp32+1, #0
+    mov cold_junc_temp32+2, #0
+    mov cold_junc_temp32+3, #0
+    mov target_temp, #0
+
     lcall Display_init_standby_screen
     setb seconds_flag
 start1:
@@ -664,6 +791,7 @@ loop:
     lcall T2S_FSM
     lcall Check_Buttons
     lcall Get_Temp
+    lcall Control_Temp
 FSM_RESET:
     mov a, FSM_state_decider
     clr c
@@ -671,7 +799,7 @@ FSM_RESET:
 	jz RESET_continue1
     ljmp FSM_RAMP_TO_SOAK ; jump to next state check if state decider doesn't match
 RESET_continue1:
-    mov PWM_Duty_Cycle255, #0
+    mov target_temp, #0
     clr T2S_FSM_start
     clr B3_flag_bit
     clr B4_flag_bit
@@ -694,7 +822,7 @@ RESET_check_start_button:
     ; Check start/cancel button and start if pressed
     jnb B1_flag_bit, FSM_RAMP_TO_SOAK ; go to check for next state
     clr B1_flag_bit
-	inc FSM_state_decider
+	mov FSM_state_decider, #STATE_RAMP_TO_SOAK
     ; Reset state and total stopwatches
     clr a
     mov seconds_state, a
@@ -711,7 +839,7 @@ FSM_RAMP_TO_SOAK: ;  should be done in 1-3 seconds
     jz RAMP_TO_SOAK_continue1
     ljmp FSM_SOAK ; go to check for next state
 RAMP_TO_SOAK_continue1:
-    mov PWM_Duty_Cycle255, #255
+    mov target_temp, soak_temp
     lcall Say_RamptoSoak
     clr B2_flag_bit
     clr B3_flag_bit
@@ -756,7 +884,7 @@ RAMP_TO_SOAK_continue3:
     jb mf, RAMP_TO_SOAK_continue4
     ljmp FSM_SOAK
 RAMP_TO_SOAK_continue4:
-    inc FSM_state_decider
+    mov FSM_state_decider, #STATE_SOAK
     clr a
     mov seconds_state, a
     mov minutes_state, a
@@ -792,7 +920,7 @@ skip_display3:
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_RAMP_TO_REFLOW ; go to next state check
 SOAK_continue2:
-    mov PWM_Duty_Cycle255, #51
+    mov target_temp, soak_temp
     ; Check if soak time has elapsed
     mov a, minutes_state
     clr c
@@ -842,7 +970,7 @@ skip_display4:
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_REFLOW
 RAMP_TO_REFLOW_continue2:
-    mov PWM_Duty_Cycle255, #255 ; Heat the oven up
+    mov target_temp, reflow_temp ; Heat the oven up
     ; Check if reflow temperature reached
     mov y+0, reflow_temp
     clr a
@@ -888,7 +1016,7 @@ skip_display5:
     Display_init_main_screen(display_mode_cooldown)
     ljmp FSM_COOLDOWN
 REFLOW_continue2:
-    mov PWM_Duty_Cycle255, #51 ; Hold temp steady
+    mov target_temp, reflow_temp ; Hold temp steady
     ; Wait for reflow time to pass before going to next state
     mov a, minutes_state
     clr c
@@ -923,7 +1051,7 @@ COOLDOWN_continue1:
     lcall send_putty
     Display_update_temperature(current_temp)
 skip_display6:
-    mov PWM_Duty_Cycle255, #0 ; Shut off oven
+    mov target_temp, #0 ; Shut off oven
     lcall Say_Ding
   ;  lcall Say_SolderingProcessComplete
     ; Wait for temperature to decrease to a safe level before going to standby/reset
@@ -1042,7 +1170,7 @@ FSM_DONE:
 
 FSM_ERROR:
     ; This is a terminal state. Escape requires reset.
-    mov PWM_Duty_Cycle255, #0
+    mov target_temp, #0
     lcall Say_AbortingProcess
     Display_init_main_screen(display_mode_error)
     lcall Display_clear_line2
