@@ -97,6 +97,8 @@ w: ds 3 ; 24-bit play counter.  Decremented in CCU ISR
 ;soak_time_total: ds 1
 ;reflow_time_total: ds 1
 current_temp: ds 1
+current_temp32: ds 4
+cold_junc_temp32: ds 4
 ; Temperature profile parameters
 soak_temp: ds 1
 soak_time_seconds: ds 1
@@ -349,37 +351,94 @@ Hex_to_bcd_8bit:
         db 0x00, 0x38, 0x01 ; 49 = 'aborting'
         db 0x00, 0x32, 0x06 ; 50 = 'process'
         db 0x00, 0x4f, 0x68 ; 51 = 'switch'
+
+Wait10us:
+    ; For ADC decimation
+    mov R0, #36
+    djnz R0, $ ; 2 machine cycles-> 2*0.13563us*36=10us
+	ret
+
 ; Returns temperature at thermocouple in register a
 Get_Temp:
-    ;mov current_temp, LM335_ADC_REGISTER
+    push ar7
     ; First get cold junction temp from LM335
+    ; Take 256 (4^4) consecutive measurements of ADC0 channel 0 at about 10 us intervals and accumulate in x
+    Load_x(0)
     mov x+0, LM335_ADC_REGISTER
-    clr a
-    mov x+1, a
-    mov x+2, a
-    mov x+3, a
-    Load_y(330)
-    lcall mul32
-    Load_y(255)
+    mov R7, #255
+    lcall Wait10us
+Get_Temp_loop1:
+    mov y+0, LM335_ADC_REGISTER
+    mov y+1, #0
+    mov y+2, #0
+    mov y+3, #0
+    lcall add32
+    lcall Wait10us
+    djnz R7, Get_Temp_loop1
+
+    ; Now divide by 16 (2^4)
+    Load_Y(16)
     lcall div32
-    Load_y(273)
+    ; x has now the 12-bit representation of the temperature
+
+    ; Convert to temperature (C)
+    Load_y(33000) ; Vref is 3.3V
+    lcall mul32
+    Load_y(((1<<12)-1)) ; 2^12-1
+    lcall div32
+    Load_Y(27300)
     lcall sub32
-    ; Cold-junction temp is now in x
-    clr a
-    mov y+1, a
-    mov y+2, a
-    mov y+3, a
+    mov cold_junc_temp32+0, x+0
+    mov cold_junc_temp32+1, x+1
+    mov cold_junc_temp32+2, x+2
+    mov cold_junc_temp32+3, x+3
+
+    Load_x(0)
+    mov x+0, THERMOCOUPLE_ADC_REGISTER
+    mov R7, #255
+    lcall Wait10us
+Get_Temp_loop2:
     mov y+0, THERMOCOUPLE_ADC_REGISTER
-    ; Thermocouple temp is now in y
-    lcall add32 ; Add cold junction temp to thermocouple temp to get actual temp
-    mov current_temp, x ; actual thermocouple temp is now in current_temp
+    mov y+1, #0
+    mov y+2, #0
+    mov y+3, #0
+    lcall add32
+    lcall Wait10us
+    djnz R7, Get_Temp_loop2
+
+    ; Now divide by 16 (2^4) and multiply by 1000
+    Load_y(16)
+    lcall div32
+    ; Convert to correct place value matching cold junction temp
+    Load_y(10)
+    lcall mul32
+    mov y+0, cold_junc_temp32+0
+    mov y+1, cold_junc_temp32+1
+    mov y+2, cold_junc_temp32+2
+    mov y+3, cold_junc_temp32+3
+    lcall add32
+    mov current_temp32+0, x+0
+    mov current_temp32+1, x+1
+    mov current_temp32+2, x+2
+    mov current_temp32+3, x+3
+    load_y(100) ; divide it down to an 8-bit value
+    lcall div32
+    mov current_temp, x+0
+    pop ar7
     ret
 
 send_putty:
-    mov a, current_temp
-    lcall Hex_to_bcd_8bit
-    Send_Lower_BCD(ar1)
-    Send_BCD(ar0)
+    mov x+0, current_temp32+0
+    mov x+1, current_temp32+1
+    mov x+2, current_temp32+2
+    mov x+3, current_temp32+3
+    lcall hex2bcd
+    Send_BCD(bcd+3)
+    Send_BCD(bcd+2)
+    Send_BCD(bcd+1)
+    mov a, #'.'
+    lcall putchar
+    Send_BCD(bcd+0)
     mov a, #'\r'
     lcall putchar
     mov a, #'\n'
