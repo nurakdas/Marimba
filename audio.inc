@@ -292,7 +292,7 @@ T2S_FSM_State11_Done:
 
 T2S_FSM_State15: ; Plays current_temp when current_temp is less than 20
 	cjne a, #15, T2S_FSM_State16
-	mov a, remainder
+	mov a, r6
 	subb a, #1 ;each index is 1 less than what is wants to say
 	lcall Play_Sound_Using_Index
 	mov T2S_FSM_State, #16
