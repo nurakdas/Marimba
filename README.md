@@ -1,1 +1,1 @@
-# ELECXXX_Project1
+An oven temperature controller. USeful for soldering SMD components onto PCBs.
