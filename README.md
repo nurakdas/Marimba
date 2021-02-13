@@ -1,1 +1,1 @@
-An oven temperature controller. USeful for soldering SMD components onto PCBs.
+An oven temperature controller. Useful for soldering SMD components onto PCBs.
